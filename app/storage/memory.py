@@ -1,9 +1,10 @@
 import time
 
+from fnmatch import fnmatch
 from collections import deque
 from typing import Optional, List, Iterable, Any
 
-from app.storage.interface import Storage
+from app.storage.storages import Storage
 from app.commands.core.base import CommandError
 
 
@@ -134,6 +135,16 @@ class InMemoryStorage():
             self.expire.pop(key, None)
             return True
         return False
+    
+    def keys(self, pattern: bytes) -> List[bytes]:
+        """Returns all keys matching pattern."""
+        result = []
+
+        for key in self.store.keys():
+            if fnmatch(key, pattern):
+                result.append(key)
+                
+        return result
 
     def get_type(self, key: bytes) -> Optional[str]:
         """Get the type of value stored at key."""

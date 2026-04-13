@@ -8,7 +8,7 @@ import traceback
 
 from app.storage.memory import InMemoryStorage
 from app.commands.core.dispatcher import CommandDispatcher
-from app.server.blocked_manager import BlockedClientsManager
+from app.server.block_manager import BlockedClientsManager
 from app.server.replication_manager import ReplicationManager
 
 from .client import Client, CLIENT_MASTER, CLIENT_NORMAL

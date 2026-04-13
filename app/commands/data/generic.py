@@ -4,3 +4,8 @@ from ..core.base import Command, command, CommandFlag
 def type_command(args, context):
     result = context.storage.get_type(args[0])
     return "none" if result is None else result
+
+@command("KEYS", 1)
+def keys_command(args, context):
+    result = context.storage.keys(args[0])
+    return result

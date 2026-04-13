@@ -11,6 +11,13 @@ class Storage(Protocol):
     - lrange: List[bytes]
     - get_type: Optional[str] ("string", "list", "stream", or None)
     """
+    def _is_expired(self, key: bytes) -> bool:
+        """Check if key has expired."""
+        ...
+
+    def keys(self, pattern: bytes) -> List[bytes]:
+        """Returns all keys matching pattern."""
+        ...
 
     def get_type(self, key: bytes) -> Optional[str]:
         """Get the type of value stored at key. Returns None if key doesn't exist."""

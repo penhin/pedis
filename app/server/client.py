@@ -6,7 +6,7 @@ from app.protocol import RESPParser, RESPEncoder, RESPError
 
 from .types import Blocked
 from .context import Context
-from .block_strategy import ListStrategy, StreamStrategy, WaitStrategy
+from .block_handler import ListStrategy, StreamStrategy, WaitStrategy
 
 CLIENT_NORMAL = "NORMAL"
 CLIENT_MASTER = "MASTER"
@@ -49,7 +49,7 @@ class Client:
         print(">>> SEND TO:", self, data)
         self.connection.sendall(self.encoder.encode(data))
     
-    def send_raw(self, data):
+    def send_raw(self, data: any):
         print(">>> SENDING RAW TO:", self, data)
         self.connection.sendall(data)
     
