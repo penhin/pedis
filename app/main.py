@@ -1,15 +1,17 @@
-import socket  # noqa: F401
-
+from app.server.server import RedisServer, ServerConfig
 
 def main():
-    # You can use print statements as follows for debugging, they'll be visible when running tests.
-    print("Logs from your program will appear here!")
+    try:
+        config = ServerConfig()
+        config = ServerConfig.parse_config(config)
 
-    # Uncomment the code below to pass the first stage
-    #
-    # server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
-    # server_socket.accept() # wait for client
-
-
+        server = RedisServer(config)
+        print("Server created, starting...")
+        server.start()
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
+           
 if __name__ == "__main__":
     main()
