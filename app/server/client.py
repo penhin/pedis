@@ -1,6 +1,6 @@
 import traceback
 
-from enum import Enum, auto
+from enum import Enum
 
 from app.protocol import RESPParser, RESPEncoder, RESPError
 
@@ -54,7 +54,25 @@ class Client:
         self.connection.sendall(data)
     
     def close(self):
-        pass
+        connection = self.connection
+        if connection is None:
+            return
+
+        self.server.blocked_manager.remove_client(self)
+        self.server.replication.remove_client(self)
+        self.server.clients.discard(self)
+
+        try:
+            self.server.sel.unregister(connection)
+        except Exception:
+            pass
+
+        try:
+            connection.close()
+        except Exception:
+            pass
+
+        self.connection = None
 
 
 class _NormalHandler:
@@ -69,8 +87,7 @@ class _NormalHandler:
         except BlockingIOError:
             return
         except ConnectionError:
-            selector.unregister(self.client.connection)
-            self.client.connection.close()
+            self.client.close()
             return
 
         context = Context(self.client.server, self.client)
@@ -124,8 +141,7 @@ class _MasterHandler:
         except BlockingIOError:
             return
         except ConnectionError:
-            selector.unregister(self.client.connection)
-            self.client.connection.close()
+            self.client.close()
             return
         except Exception as e:
             print(str(e))

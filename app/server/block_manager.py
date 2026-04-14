@@ -52,6 +52,20 @@ class BlockedClientsManager:
         else:
             client.send(NullArray())
 
+    def remove_client(self, client):
+        """Remove a client from all blocked queues and clear its state."""
+        for key in list(client.blocked_keys):
+            queue = self.blocked_clients.get(key)
+            if queue and client in queue:
+                queue.remove(client)
+
+        client.blocked = False
+        client.blocked_keys = []
+        client.blocked_ids = []
+        client.blocked_timeout = None
+        client.blocked_type = BlockedType.NONE
+        client.block_strategy = None
+
     def notify_key(self, key):
         """Notify that a key has been updated, potentially unblocking clients."""
         queue = self.blocked_clients.get(key)

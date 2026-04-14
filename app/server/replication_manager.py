@@ -215,6 +215,16 @@ class ReplicationManager:
     def register_replica(self, client):
         client.flags.add(CLIENT_REPLICA)
         self.replica_client.add(client)
+
+    def remove_client(self, client):
+        """Remove a disconnected client from replication bookkeeping."""
+        self.replica_client.discard(client)
+        self.replica_acks.pop(client, None)
+        self.wait_clients = [entry for entry in self.wait_clients if entry[0] is not client]
+
+        if self.master_connection is client:
+            self.master_connection = None
+            self.repl_state = None
     
     def propagate(self, raw_command: bytes):
         if not raw_command:

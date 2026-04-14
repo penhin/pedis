@@ -1,5 +1,3 @@
-import time
-
 from .constants import *
 from .buffer import RDBBuffer
 from .callback_handler import RdbCallback
@@ -14,10 +12,20 @@ class RDBParser:
         
     def read_string(self):
         length, is_spec = self.decode_length()
-        if is_spec:
-            raise NotImplementedError(f"Special string read not supported yet")
+        
+        if not is_spec:
+            return self.buffer.read_bytes(length)
+        
+        if length == 0:
+            val = self.buffer.read_uint8()
+        elif length == 1:
+            val = self.buffer.read_uint16()
+        elif length == 2:
+            val = self.buffer.read_uint32()
+        elif length == 3:
+            pass
 
-        return self.buffer.read_bytes(length)
+        return str(val).encode()
     
     def read_value_by_type(self, value_type):
         if value_type == ValueType.STRING:
@@ -65,6 +73,8 @@ class RDBParser:
             else:
                 raise Exception(f"Unexpected OpCode: {opcode}")
 
+        self.callback.on_end()
+
     """ Header section """
 
     """ Metadata section """
@@ -72,8 +82,16 @@ class RDBParser:
     """ Database section """
 
     def handle_select_db(self):
-        db_id, = self.decode_length()
+        db_id, _ = self.decode_length()
         self.callback.on_database_select(db_id)
+
+    def handle_resize_db(self):
+        self.decode_length()
+        self.decode_length()
+
+    def handle_aux_field(self):
+        self.read_string()
+        self.read_string()
 
     def next_is_kv_pair(self, opcode: OpCode):
         return True if opcode < 15 or opcode == OpCode.EXPIRETIME or opcode == OpCode.EXPIRETIMEMS else False

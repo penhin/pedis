@@ -1,3 +1,4 @@
+from app.bootstrap import bootstrap_server
 from app.server.server import RedisServer, ServerConfig
 
 def main():
@@ -6,6 +7,7 @@ def main():
         config = ServerConfig.parse_config(config)
 
         server = RedisServer(config)
+        bootstrap_server(server)
         print("Server created, starting...")
         server.start()
     except Exception as e:
