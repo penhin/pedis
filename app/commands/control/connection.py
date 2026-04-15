@@ -1,7 +1,12 @@
+from app.protocol import NullBulk
+
 from ..core.base import CommandResult, command, CommandFlag
 
 @command("PING", -1, flags=[CommandFlag.ALLOWED_IN_PUBSUB])
 def ping_command(args, context):
+    if context.client.pubsub.active:
+        return [b"pong", b""]
+
     if args:
         return args[0]
     return "PONG"
