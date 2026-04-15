@@ -1,4 +1,4 @@
-from ..core.base import Command, command, CommandFlag
+from ..core.base import command
 
 @command("INFO", 1)
 def info_command(args, context):

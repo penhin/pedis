@@ -2,9 +2,9 @@ import traceback
 
 from enum import Enum
 
+from app.commands.core.base import CommandResult
 from app.protocol import RESPParser, RESPEncoder, RESPError
 
-from .types import Blocked
 from .context import Context
 from .block_handler import ListStrategy, StreamStrategy, WaitStrategy
 
@@ -52,6 +52,15 @@ class Client:
     def send_raw(self, data: any):
         print(">>> SENDING RAW TO:", self, data)
         self.connection.sendall(data)
+
+    def send_result(self, result: CommandResult):
+        for frame in result.frames:
+            if frame.kind == "resp":
+                self.send(frame.value)
+            elif frame.kind == "raw":
+                self.send_raw(self.encoder.bulk_raw(frame.value))
+            else:
+                raise ValueError(f"Unknown response frame kind: {frame.kind}")
     
     def close(self):
         connection = self.connection
@@ -93,8 +102,8 @@ class _NormalHandler:
         context = Context(self.client.server, self.client)
 
         try:
-            message = self.client.server.dispatcher.dispatch(cmd_list, raw_command, context)
-            print(f"Master command result: {self.client}, {message}")
+            result = self.client.server.dispatcher.dispatch(cmd_list, raw_command, context)
+            print(f"Master command result: {self.client}, {result}")
         except RESPError as e:
             print(str(e))
             self.client.send(e)
@@ -105,16 +114,8 @@ class _NormalHandler:
             traceback.print_exc()
             return
 
-        if isinstance(message, tuple) and len(message) == 2:
-            header, payload = message
-            if header is not None:
-                self.client.send(header)
-            if payload is not None:
-                self.client.send_raw(self.client.encoder.bulk_raw(payload))
-            return
-
-        if message is not None and not isinstance(message, Blocked):
-            self.client.send(message)
+        if not result.blocked:
+            self.client.send_result(result)
 
 class _MasterHandler:
     def __init__(self, client: Client):

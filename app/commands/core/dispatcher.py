@@ -1,4 +1,4 @@
-from .base import COMMANDS, CommandError, CommandFlag
+from .base import COMMANDS, CommandError, CommandFlag, CommandResult
 
 class CommandDispatcher:
     def dispatch(self, cmd_list, raw_command, context):
@@ -12,7 +12,7 @@ class CommandDispatcher:
 
         if client.in_multi:
             client.multi_queue.append((cmd_list, raw_command))
-            return 'QUEUED'
+            return CommandResult.resp("QUEUED")
 
         if name not in COMMANDS:
             raise CommandError("ERR unknown command")
@@ -20,7 +20,7 @@ class CommandDispatcher:
         command = COMMANDS[name]
         response = command.execute(args, context)
         
-        if CommandFlag.WRITE in command.flags:
+        if CommandFlag.WRITE in command.flags and response.propagate:
             print(f"{raw_command} command should be propagated")
             context.server.replication.propagate(raw_command)
         
@@ -34,7 +34,7 @@ class CommandDispatcher:
                 raise CommandError("ERR MUITL calls can not be nested")
             client.in_multi = True
             client.multi_queue = []
-            return 'OK'
+            return CommandResult.resp("OK")
         elif name == "EXEC":
             if not client.in_multi:
                 raise CommandError("ERR EXEC without MULTI")
@@ -44,7 +44,7 @@ class CommandDispatcher:
                 raise CommandError("ERR DISCARD without MULTI")
             client.in_multi = False
             client.multi_queue = []
-            return 'OK'
+            return CommandResult.resp("OK")
         
     def exec_transaction(self, context):
         client = context.client
@@ -59,9 +59,13 @@ class CommandDispatcher:
             try:
                 cmd_list, raw_command = item if isinstance(item, tuple) else (item, b"")
                 result = self.dispatch(cmd_list, raw_command, context)
-                results.append(result)
+                if result.blocked:
+                    raise CommandError("ERR blocking commands are not allowed inside MULTI")
+                if len(result.frames) != 1 or result.frames[0].kind != "resp":
+                    raise CommandError("ERR unsupported response inside EXEC")
+                results.append(result.frames[0].value)
             except CommandError as e:
                 results.append(e)
         
-        return results
+        return CommandResult.resp(results)
         

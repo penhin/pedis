@@ -1,6 +1,6 @@
 from app.server.types import Blocked
 
-from ..core.base import command, CommandError, CommandFlag
+from ..core.base import CommandResult, command, CommandError, CommandFlag
 
 @command("REPLCONF", -2, flags=[CommandFlag.REPL])
 def replconf_command(args, context):
@@ -12,8 +12,8 @@ def replconf_command(args, context):
 @command("PSYNC", -3, flags=[CommandFlag.REPL])
 def psync_command(args, context):
     try:
-        response = context.server.replication.psync(context.client) 
-        return response
+        header, payload = context.server.replication.psync(context.client)
+        return CommandResult.psync(header, payload)
     except Exception as e:
         raise CommandError(f"ERR {e}")
     
@@ -23,6 +23,7 @@ def wait_command(args, context):
         numreplicas = int(args[0])
         timeout_ms = int(args[1])
         timeout = timeout_ms / 1000
-        return context.server.replication.wait_for_replicas(context.client, numreplicas, timeout)
+        result = context.server.replication.wait_for_replicas(context.client, numreplicas, timeout)
+        return CommandResult.blocked_result() if isinstance(result, Blocked) else result
     except Exception as e:
         raise CommandError(f"ERR {e}")

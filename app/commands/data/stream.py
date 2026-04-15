@@ -1,9 +1,9 @@
 import time
 
-from app.server.types import Blocked
 from app.server.client import BlockedType
+from app.storage.errors import InvalidStreamIdError, StreamIdOrderError, WrongTypeError
 
-from ..core.base import command, CommandError, CommandFlag
+from ..core.base import CommandResult, command, CommandError, CommandFlag
 
 @command("XADD", -4, flags=[CommandFlag.WRITE])
 def xadd_command(args, context):
@@ -17,7 +17,14 @@ def xadd_command(args, context):
     for i in range(2, len(args), 2):
         fields[args[i]] = args[i + 1]
     
-    ret_id = context.storage.xadd(key, fields, id)
+    try:
+        ret_id = context.storage.xadd(key, fields, id)
+    except WrongTypeError:
+        raise CommandError("WRONGTYPE Operation against a key holding the wrong kind of value")
+    except InvalidStreamIdError as e:
+        raise CommandError(f"ERR {e}")
+    except StreamIdOrderError as e:
+        raise CommandError(f"ERR {e}")
 
     context.blocked_manager.notify_key(key)
 
@@ -28,7 +35,10 @@ def xrange_command(args, context):
     key = args[0]
     start_id = args[1]
     end_id = args[2]
-    return context.storage.xrange(key, start_id, end_id)
+    try:
+        return context.storage.xrange(key, start_id, end_id)
+    except WrongTypeError:
+        raise CommandError("WRONGTYPE Operation against a key holding the wrong kind of value")
 
 @command("XREAD", -3)
 def xread_command(args, context):
@@ -74,7 +84,10 @@ def xread_command(args, context):
             else:
                 ids[i] = last_id
 
-    result = context.storage.xread(keys, ids)
+    try:
+        result = context.storage.xread(keys, ids)
+    except WrongTypeError:
+        raise CommandError("WRONGTYPE Operation against a key holding the wrong kind of value")
 
     empty = (
         not result or
@@ -89,6 +102,6 @@ def xread_command(args, context):
             ids, BlockedType.STREAM
         )
 
-        return Blocked()
+        return CommandResult.blocked_result()
 
     return result

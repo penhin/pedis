@@ -83,15 +83,15 @@ class StorageCallback(RdbCallback):
             value: Value associated with the key
             expiry: Optional expiration time in milliseconds (or None)
         """
-        opts = {}
+        ttl_seconds = None
         if expiry is not None:
             remaining_time = (expiry - int(time.time() * 1000)) / 1000
             if remaining_time > 0:
-                opts['ex'] = remaining_time
+                ttl_seconds = remaining_time
             else:
                 return
 
-        self.storage.set(key, value, opts)
+        self.storage.set(key, value, ttl_seconds=ttl_seconds)
 
     def on_list_push(self, key, value):
         """Called when a list element is parsed.

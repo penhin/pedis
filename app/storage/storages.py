@@ -23,14 +23,8 @@ class Storage(Protocol):
         """Get the type of value stored at key. Returns None if key doesn't exist."""
         ...
 
-    def set(self, key: bytes, value: bytes, opts: dict) -> None:
-        """Set a string value with optional TTL (EX/PX) and flags (NX/XX/GET/KEEPTTL).
-        
-        opts dict keys: 
-        - 'ex': TTL in seconds (int or None)
-        - 'px': TTL in milliseconds (int or None)
-        - 'nx', 'xx', 'get', 'keepttl': boolean flags
-        """
+    def set(self, key: bytes, value: bytes, ttl_seconds: Optional[float] = None) -> None:
+        """Set a string value with an optional TTL in seconds."""
         ...
 
     def get(self, key: bytes) -> Optional[bytes]:
@@ -97,6 +91,6 @@ class Storage(Protocol):
         """Read data from one or multiple streams"""
         ...
     
-    def get_last_id(self, keys: list[bytes]) -> bytes:
-        """"Return the stream last ID"""
+    def get_last_id(self, key: bytes) -> Optional[bytes]:
+        """Return the last stream ID for a key, or None if the key does not exist."""
         ...

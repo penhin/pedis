@@ -5,7 +5,12 @@ from collections import deque
 from typing import Optional, List, Iterable, Any
 
 from app.storage.storages import Storage
-from app.commands.core.base import CommandError
+from app.storage.errors import (
+    InvalidStreamIdError,
+    InvalidValueError,
+    StreamIdOrderError,
+    WrongTypeError,
+)
 
 
 class StreamEntry:
@@ -68,9 +73,11 @@ class Stream:
             if seq == float('inf'):
                 seq = self.last_seq + 1 if ms == self.last_ms else 0
             if (ms, seq) == (0, 0):
-                raise CommandError("ERR The ID specified in XADD must be greater than 0-0")
+                raise InvalidStreamIdError("The ID specified in XADD must be greater than 0-0")
             if (ms, seq) <= (self.last_ms, self.last_seq):
-                raise CommandError("ERR The ID specified in XADD is equal or smaller than the target stream top item")
+                raise StreamIdOrderError(
+                    "The ID specified in XADD is equal or smaller than the target stream top item"
+                )
             self.last_ms = ms
             self.last_seq = seq
 
@@ -153,20 +160,16 @@ class InMemoryStorage():
         entry = self.store.get(key)
         return entry.type if entry else None
 
-    def set(self, key: bytes, value: bytes, opts: dict) -> None:
+    def set(self, key: bytes, value: bytes, ttl_seconds: Optional[float] = None) -> None:
         """Set a string value with optional TTL."""
         self.store[key] = RedisValue("string", value)
-        self.expire.pop(key, None)
-
-        ttl = 0
-        if opts:
-            if opts.get("ex"):
-                ttl = opts["ex"]
-            elif opts.get("px"):
-                ttl = opts["px"] / 1000
-
-        if ttl:
-            self.expire[key] = time.time() + ttl
+        if ttl_seconds is None:
+            self.expire.pop(key, None)
+        elif ttl_seconds > 0:
+            self.expire[key] = time.time() + ttl_seconds
+        else:
+            self.store.pop(key, None)
+            self.expire.pop(key, None)
 
     def get(self, key: bytes) -> Optional[bytes]:
         """Get string value. Returns None if key doesn't exist or is expired."""
@@ -174,8 +177,10 @@ class InMemoryStorage():
             return None
 
         entry = self.store.get(key)
-        if entry is None or not entry.is_string():
+        if entry is None:
             return None
+        if not entry.is_string():
+            raise WrongTypeError
 
         return entry.value
     
@@ -184,15 +189,15 @@ class InMemoryStorage():
         entry = self.store.get(key)
         
         if entry is None:
-            self.set(key, b"1", [])
+            self.set(key, b"1")
             return b"1"
         elif not entry.is_string():
-            raise ValueError
+            raise WrongTypeError
         
         try:
             entry.value = str(int(entry.value) + 1).encode()
         except ValueError:
-            raise ValueError        
+            raise InvalidValueError        
 
         return entry.value
 
@@ -225,7 +230,7 @@ class InMemoryStorage():
             entry = RedisValue("list", deque())
             self.store[key] = entry
         elif not entry.is_list():
-            raise TypeError
+            raise WrongTypeError
 
         lst: deque = entry.value
 
@@ -243,8 +248,10 @@ class InMemoryStorage():
             return []
 
         entry = self.store.get(key)
-        if entry is None or not entry.is_list():
+        if entry is None:
             return []
+        if not entry.is_list():
+            raise WrongTypeError
 
         lst: deque = entry.value
         n = len(lst)
@@ -268,8 +275,10 @@ class InMemoryStorage():
             return 0
 
         entry = self.store.get(key)
-        if entry is None or not entry.is_list():
+        if entry is None:
             return 0
+        if not entry.is_list():
+            raise WrongTypeError
 
         return len(entry.value)
 
@@ -279,8 +288,10 @@ class InMemoryStorage():
             return None
 
         entry = self.store.get(key)
-        if entry is None or not entry.is_list():
+        if entry is None:
             return None
+        if not entry.is_list():
+            raise WrongTypeError
 
         lst: deque = entry.value
         if len(lst) == 0:
@@ -316,7 +327,7 @@ class InMemoryStorage():
             entry = RedisValue("stream", Stream())
             self.store[key] = entry
         elif not entry.is_stream():
-            raise TypeError
+            raise WrongTypeError
 
         stream: Stream = entry.value
         return stream.add(fields, id)
@@ -327,36 +338,33 @@ class InMemoryStorage():
         if entry is None:
             return []
         elif not entry.is_stream():
-            raise TypeError
+            raise WrongTypeError
 
         stream: Stream = entry.value
         return stream.range(start, end)
 
     def xread(self, keys: list[bytes], ids: list[bytes]) -> list[list[Any]]:
         """Read data from one or multiple streams"""
-        if len(keys) != len(ids):
-            raise CommandError("ERR XREAD keys and ids length mismatch")
-
         result = []
         for key, id in zip(keys, ids):
             entry = self.store.get(key)
             if entry is None:
                 result.append([key, []])
             elif not entry.is_stream():
-                raise TypeError
+                raise WrongTypeError
             else:
                 stream: Stream = entry.value
                 result.append([key, stream.read(id)])
         return result
     
-    def get_last_id(self, key: bytes) -> bytes:
+    def get_last_id(self, key: bytes) -> Optional[bytes]:
         """"Return the stream last ID"""
         entry = self.store.get(key)
         if entry is None:
-            raise KeyError
+            return None
 
         if not entry.is_stream():
-            raise TypeError
+            raise WrongTypeError
 
         stream: Stream = entry.value
         return stream.last_id
