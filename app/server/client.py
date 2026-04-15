@@ -176,6 +176,10 @@ class _MasterHandler:
     def handle(self, selector):
         try:
             while True:
+                if self.client.server.replication.repl_state == "RDB_TRANSFER":
+                    self.client.server.replication.finish_rdb_transfer(self.client)
+                    continue
+
                 parsed, captured_bytes = self.client.parser.parse()
 
                 print(f"Replica received command: {parsed}")

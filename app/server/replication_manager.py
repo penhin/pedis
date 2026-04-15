@@ -134,13 +134,17 @@ class ReplicationManager:
                 parts = reply.split()
                 self.master_replid = parts[1].decode()
                 self.master_repl_offset = int(parts[2])
-
-                self.repl_state = "HS_SUCCE"
-
-                rdb = client.parser.parse_rdb_file()
-                print(f"rdb data: {rdb}")
+                self.repl_state = "RDB_TRANSFER"
   
         return None
+
+    def finish_rdb_transfer(self, client):
+        if self.repl_state != "RDB_TRANSFER":
+            return
+
+        rdb = client.parser.parse_rdb_file()
+        print(f"rdb data: {rdb}")
+        self.repl_state = "HS_SUCCE"
 
     def replconf(self, client, args: List[bytes]) -> CommandResult | str | None:
         """Process a REPLCONF request from a replica/master connection.
