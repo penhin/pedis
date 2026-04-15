@@ -9,6 +9,7 @@ import traceback
 from app.storage.memory import InMemoryStorage
 from app.commands.core.dispatcher import CommandDispatcher
 from app.server.block_manager import BlockedClientsManager
+from app.server.pubsub_manager import PubSubManager
 from app.server.replication_manager import ReplicationManager
 
 from .client import Client, CLIENT_MASTER, CLIENT_NORMAL
@@ -94,6 +95,7 @@ class RedisServer:
         self.storage = InMemoryStorage()
         self.dispatcher = CommandDispatcher()
         self.blocked_manager = BlockedClientsManager(self)
+        self.pubsub = PubSubManager(self)
         
         self.clients = set()
         self.replication = ReplicationManager(self)

@@ -40,15 +40,21 @@ class BlockingState:
 
 @dataclass
 class PubSubState:
-    subscribed: bool = False
+    active: bool = False
     channels: set[bytes] = field(default_factory=set)
     
     def clear(self):
-        self.subscribed = False
+        self.active = False
         self.channels.clear()
     
     def add(self, channel: bytes) -> int:
         self.channels.add(channel)
+        self.active = True
+        return len(self.channels)
+
+    def remove(self, channel: bytes) -> int:
+        self.channels.discard(channel)
+        self.active = len(self.channels) > 0
         return len(self.channels)
 
 @dataclass
@@ -113,6 +119,7 @@ class Client:
             return
 
         self.server.blocked_manager.remove_client(self)
+        self.server.pubsub.remove_client(self)
         self.server.replication.remove_client(self)
         self.server.clients.discard(self)
 

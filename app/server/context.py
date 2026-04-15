@@ -13,6 +13,10 @@ class Context:
         return self.server.blocked_manager
 
     @property
+    def pubsub(self):
+        return self.server.pubsub
+
+    @property
     def encoder(self):
         return self.client.encoder
 

@@ -10,6 +10,7 @@ class CommandError(RESPError):
 class CommandFlag(str, Enum):
     WRITE = "write"
     REPL = "replication"
+    ALLOWED_IN_PUBSUB = "allowed_in_pubsub"
 
 
 @dataclass(frozen=True)

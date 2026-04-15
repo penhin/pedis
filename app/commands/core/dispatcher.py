@@ -13,6 +13,15 @@ class CommandDispatcher:
         if client.transaction.active:
             client.transaction.queue.append((cmd_list, raw_command))
             return CommandResult.resp("QUEUED")
+        
+        if client.pubsub.active:
+            if name not in COMMANDS:
+                raise CommandError("ERR unknown command")
+            pubsub_command = COMMANDS[name]
+            if CommandFlag.ALLOWED_IN_PUBSUB not in pubsub_command.flags:
+                raise CommandError(
+                    f"ERR Can't execute '{name}', only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context"
+                )
 
         if name not in COMMANDS:
             raise CommandError("ERR unknown command")
