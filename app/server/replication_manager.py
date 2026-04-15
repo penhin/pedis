@@ -4,6 +4,8 @@ import time
 
 from typing import List
 
+from app.commands.core.base import CommandResult
+
 from .types import Blocked
 from .client import CLIENT_REPLICA
 
@@ -54,8 +56,7 @@ class ReplicationManager:
                     acknowledged += 1
 
             if acknowledged >= required_replicas:
-                client.blocked = False
-                client.send(acknowledged)
+                self._send_wait_result(client, acknowledged)
                 print(
                     f"WAIT unblocked: required_offset={required_offset}, "
                     f"required_replicas={required_replicas}, acknowledged={acknowledged}"
@@ -73,15 +74,13 @@ class ReplicationManager:
             client, required_offset, required_replicas, deadline = entry
             
             if deadline is not None and now >= deadline:
-                client.blocked = False
-
                 acknowledged = 0
                 for replica in self.replica_client:
                     offset = self.replica_acks.get(replica, 0)
                     if offset >= required_offset:
                         acknowledged += 1
 
-                client.send(acknowledged)
+                self._send_wait_result(client, acknowledged)
                 print(
                     f"WAIT timeout: required_offset={required_offset}, "
                     f"required_replicas={required_replicas}, acknowledged={acknowledged}"
@@ -91,7 +90,11 @@ class ReplicationManager:
         for entry in to_unblock:
             self.wait_clients.remove(entry)
 
-    def start_replication(self, client) -> list[bytes]:
+    def _send_wait_result(self, client, acknowledged: int):
+        client.blocking.active = False
+        client.send_result(CommandResult.resp(acknowledged, propagate=False))
+
+    def start_replication(self, client) -> CommandResult:
         """Called when a new master connection is established.
 
         Returns the first command to send (list of bytes) so that the
@@ -102,9 +105,9 @@ class ReplicationManager:
         self.master_connection = client
         self.repl_state = "PING_SENT"
         print("Starting replication handshake: sending PING")
-        return [b"PING"]
+        return CommandResult.resp([b"PING"], propagate=False)
 
-    def handle_master_response(self, client, reply) -> list[bytes] | None:
+    def handle_master_response(self, client, reply) -> CommandResult | None:
         """Process a single master reply and optionally return the next
         command (as list of bytes) that should be sent.
         """
@@ -112,15 +115,18 @@ class ReplicationManager:
         if self.repl_state == "PING_SENT":
             if reply == b"PONG":
                 self.repl_state = "REPLCONF_PORT_SENT"
-                return [b"REPLCONF", b"listening-port", str(self.server.config.port).encode()]
+                return CommandResult.resp(
+                    [b"REPLCONF", b"listening-port", str(self.server.config.port).encode()],
+                    propagate=False,
+                )
         elif self.repl_state == "REPLCONF_PORT_SENT":
             if reply == b"OK":
                 self.repl_state = "REPLCONF_CAPA_SENT"
-                return [b"REPLCONF", b"capa", b"psync2"]
+                return CommandResult.resp([b"REPLCONF", b"capa", b"psync2"], propagate=False)
         elif self.repl_state == "REPLCONF_CAPA_SENT":
             if reply == b"OK":
                 self.repl_state = "PSYNC_SENT"
-                return [b"PSYNC", b"?", b"-1"]
+                return CommandResult.resp([b"PSYNC", b"?", b"-1"], propagate=False)
         elif self.repl_state == "PSYNC_SENT":
             if isinstance(reply, bytes) and reply.startswith(b"FULLRESYNC"):
                 print("Replication handshake completed")
@@ -136,7 +142,7 @@ class ReplicationManager:
   
         return None
 
-    def replconf(self, client, args: List[bytes]) -> str | None:
+    def replconf(self, client, args: List[bytes]) -> CommandResult | str | None:
         """Process a REPLCONF request from a replica/master connection.
         """
         print(f"REPLCONF received: {args}")
@@ -161,8 +167,10 @@ class ReplicationManager:
                 if i + 1 >= len(args):
                     raise ValueError("ERR syntax error")
 
-                client.send([b"REPLCONF", b"ACK", f"{self.repl_offset}".encode()])
-                return None
+                return CommandResult.resp(
+                    [b"REPLCONF", b"ACK", f"{self.repl_offset}".encode()],
+                    propagate=False,
+                )
             elif token == b"ACK":
                 if i + 1 >= len(args):
                     raise ValueError("ERR syntax error")
@@ -205,15 +213,15 @@ class ReplicationManager:
         
         deadline = time.time() + timeout if timeout > 0 else None
         self.wait_clients.append((client, current_offset, numreplicas, deadline))
-        client.blocked = True
+        client.blocking.active = True
 
         for replica in self.replica_client:
-            replica.send([b"REPLCONF", b"GETACK", b"*"])
+            replica.send_result(CommandResult.resp([b"REPLCONF", b"GETACK", b"*"], propagate=False))
         
         return Blocked()
 
     def register_replica(self, client):
-        client.flags.add(CLIENT_REPLICA)
+        client.role.add(CLIENT_REPLICA)
         self.replica_client.add(client)
 
     def remove_client(self, client):

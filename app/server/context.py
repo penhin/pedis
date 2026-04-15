@@ -16,5 +16,5 @@ class Context:
     def encoder(self):
         return self.client.encoder
 
-    def wake_client(self, client, response):
-        self.blocked_manager.unblock_client(client, response)
+    def wake_client(self, client, result):
+        self.blocked_manager.unblock_client(client, result)

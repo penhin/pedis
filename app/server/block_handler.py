@@ -13,7 +13,7 @@ class BlockStrategy(ABC):
             client: Client instance
             **kwargs: Strategy-specific parameters
         """
-        for key in client.blocked_keys:
+        for key in client.blocking.keys:
             manager.blocked_clients[key].append(client)
     
     @abstractmethod
@@ -76,8 +76,8 @@ class StreamStrategy(BlockStrategy):
         if key is None:
             return None
         
-        idx = client.blocked_keys.index(key)
-        last_id = client.blocked_ids[idx]
+        idx = client.blocking.keys.index(key)
+        last_id = client.blocking.ids[idx]
         result = manager.server.storage.xread([key], [last_id])
         if result and result[0][1]:
             return result

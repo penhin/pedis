@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from app.protocol import RESPError
+from app.protocol import NullArray, RESPError
 
 class CommandError(RESPError):
     pass
@@ -35,6 +35,10 @@ class CommandResult:
     @classmethod
     def resp(cls, value: Any, propagate: bool = True):
         return cls(frames=[ResponseFrame("resp", value)], propagate=propagate)
+
+    @classmethod
+    def null_array(cls):
+        return cls.resp(NullArray(), propagate=False)
 
     @classmethod
     def raw(cls, value: bytes):

@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 import traceback
 
 from enum import Enum
@@ -19,6 +20,57 @@ class BlockedType(Enum):
     ZSET = None
     STREAM = StreamStrategy
 
+
+@dataclass
+class BlockingState:
+    active: bool = False
+    keys: list[bytes] = field(default_factory=list)
+    ids: list[bytes] = field(default_factory=list)
+    timeout: float | None = None
+    kind: BlockedType = BlockedType.NONE
+    strategy: object | None = None
+
+    def clear(self):
+        self.active = False
+        self.keys.clear()
+        self.ids.clear()
+        self.timeout = None
+        self.kind = BlockedType.NONE
+        self.strategy = None
+
+@dataclass
+class PubSubState:
+    subscribed: bool = False
+    channels: set[bytes] = field(default_factory=set)
+    
+    def clear(self):
+        self.subscribed = False
+        self.channels.clear()
+    
+    def add(self, channel: bytes) -> int:
+        self.channels.add(channel)
+        return len(self.channels)
+
+@dataclass
+class TransactionState:
+    active: bool = False
+    queue: list[tuple[list[bytes], bytes]] = field(default_factory=list)
+
+    def reset(self):
+        self.active = False
+        self.queue.clear()
+
+
+@dataclass
+class RoleState:
+    flags: set[str] = field(default_factory=set)
+
+    def has(self, flag: str) -> bool:
+        return flag in self.flags
+
+    def add(self, flag: str):
+        self.flags.add(flag)
+
 class Client:
 
     def __init__(self, connection, address, server, flags=None):
@@ -28,19 +80,12 @@ class Client:
         self.parser = RESPParser(connection)
         self.encoder = RESPEncoder()
 
-        self.blocked = False
-        self.blocked_keys = []
-        self.blocked_ids = []
-        self.blocked_timeout = None
-        self.blocked_type = BlockedType.NONE
-        self.block_strategy = None
+        self.pubsub = PubSubState()
+        self.blocking = BlockingState()
+        self.transaction = TransactionState()
+        self.role = RoleState(set(flags or []))
 
-        self.in_multi = False
-        self.multi_queue = []
-
-        self.flags = set(flags or [])
-
-        if CLIENT_MASTER in self.flags:
+        if self.role.has(CLIENT_MASTER):
             self.handler = _MasterHandler(self)
         else:
             self.handler = _NormalHandler(self)
@@ -131,11 +176,14 @@ class _MasterHandler:
                 if isinstance(parsed, bytes):
                     nxt = self.client.server.replication.handle_master_response(self.client, parsed)
                     if nxt:
-                        self.client.send(nxt)
+                        self.client.send_result(nxt)
                 else:
                     context = Context(self.client.server, self.client)
                     result = self.client.server.dispatcher.dispatch(parsed, b"", context)
                     print(f"Replica command result: {result}")
+
+                    if self._should_reply_to_master(parsed, result):
+                        self.client.send_result(result)
 
                     self.client.server.replication.repl_offset += captured_bytes
 
@@ -148,4 +196,13 @@ class _MasterHandler:
             print(str(e))
             traceback.print_exc()
             return
+
+    def _should_reply_to_master(self, parsed, result: CommandResult) -> bool:
+        if result.blocked or not result.frames:
+            return False
+        if not isinstance(parsed, list) or not parsed:
+            return False
+
+        command_name = parsed[0].upper()
+        return command_name == b"REPLCONF"
     

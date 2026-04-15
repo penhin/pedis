@@ -139,7 +139,7 @@ class RedisServer:
 
         initial = self.replication.start_replication(client)
         if initial:
-            sock.sendall(client.encoder.encode(initial))
+            client.send_result(initial)
     
     def run_event_loop(self):
         print("Server start running event loop...")

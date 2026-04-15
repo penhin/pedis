@@ -10,8 +10,8 @@ class CommandDispatcher:
         if result is not None:
             return result
 
-        if client.in_multi:
-            client.multi_queue.append((cmd_list, raw_command))
+        if client.transaction.active:
+            client.transaction.queue.append((cmd_list, raw_command))
             return CommandResult.resp("QUEUED")
 
         if name not in COMMANDS:
@@ -30,28 +30,26 @@ class CommandDispatcher:
         client = context.client
 
         if name == "MULTI":
-            if client.in_multi:
+            if client.transaction.active:
                 raise CommandError("ERR MUITL calls can not be nested")
-            client.in_multi = True
-            client.multi_queue = []
+            client.transaction.active = True
+            client.transaction.queue = []
             return CommandResult.resp("OK")
         elif name == "EXEC":
-            if not client.in_multi:
+            if not client.transaction.active:
                 raise CommandError("ERR EXEC without MULTI")
             return self.exec_transaction(context)
         elif name == "DISCARD":
-            if not client.in_multi:
+            if not client.transaction.active:
                 raise CommandError("ERR DISCARD without MULTI")
-            client.in_multi = False
-            client.multi_queue = []
+            client.transaction.reset()
             return CommandResult.resp("OK")
         
     def exec_transaction(self, context):
         client = context.client
-        queue = client.multi_queue
+        queue = list(client.transaction.queue)
         
-        client.in_multi = False
-        client.multi_queue = []
+        client.transaction.reset()
         
         results = []
         

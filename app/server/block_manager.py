@@ -2,7 +2,7 @@ import heapq
 
 from collections import defaultdict, deque
 
-from app.protocol import NullArray
+from app.commands.core.base import CommandResult, normalize_command_result
 
 from .client import BlockedType
 
@@ -16,14 +16,14 @@ class BlockedClientsManager:
 
     def block_client(self, client, keys, timeout=None, ids=None, blocked_type=BlockedType.LIST, **extra):
         """Block a client on the given keys with optional timeout and ids."""
-        client.blocked_keys = list(keys or [])
-        client.blocked_ids = list(ids) if ids else [b'0-0'] * len(client.blocked_keys)
-        client.blocked_timeout = timeout
-        client.blocked_type = blocked_type
-        client.block_strategy = blocked_type.value()
-        client.blocked = True
+        client.blocking.keys = list(keys or [])
+        client.blocking.ids = list(ids) if ids else [b'0-0'] * len(client.blocking.keys)
+        client.blocking.timeout = timeout
+        client.blocking.kind = blocked_type
+        client.blocking.strategy = blocked_type.value()
+        client.blocking.active = True
         
-        strategy = client.block_strategy
+        strategy = client.blocking.strategy
         if strategy:
             strategy.block(self, client, **extra)
         
@@ -32,39 +32,28 @@ class BlockedClientsManager:
 
     def unblock_client(self, client, response=None):
         """Unblock a client and send response."""
-        if not client.blocked:
+        if not client.blocking.active:
                 return
 
-        for key in client.blocked_keys:
+        for key in client.blocking.keys:
             queue = self.blocked_clients.get(key)
             if queue and client in queue:
                 queue.remove(client)
 
-        client.blocked = False
-        client.blocked_keys = []
-        client.blocked_ids = []
-        client.blocked_timeout = None
-        client.blocked_type = BlockedType.NONE
-        client.block_strategy = None
+        client.blocking.clear()
 
-        if response is not None:
-            client.send(response)
-        else:
-            client.send(NullArray())
+        result = CommandResult.null_array() if response is None else normalize_command_result(response)
+        result.propagate = False
+        client.send_result(result)
 
     def remove_client(self, client):
         """Remove a client from all blocked queues and clear its state."""
-        for key in list(client.blocked_keys):
+        for key in list(client.blocking.keys):
             queue = self.blocked_clients.get(key)
             if queue and client in queue:
                 queue.remove(client)
 
-        client.blocked = False
-        client.blocked_keys = []
-        client.blocked_ids = []
-        client.blocked_timeout = None
-        client.blocked_type = BlockedType.NONE
-        client.block_strategy = None
+        client.blocking.clear()
 
     def notify_key(self, key):
         """Notify that a key has been updated, potentially unblocking clients."""
@@ -74,17 +63,17 @@ class BlockedClientsManager:
 
         while queue:
             client = queue.popleft()
-            if not client.blocked or key not in client.blocked_keys:
+            if not client.blocking.active or key not in client.blocking.keys:
                 continue  
 
             response = None
-            strategy = client.block_strategy
+            strategy = client.blocking.strategy
             if strategy:
                 response = strategy.get_response(self, client, strategy.can_unblock(self, client, key))
 
             if response is not None:
                 self.unblock_client(client, response)
-                for other_key in client.blocked_keys:
+                for other_key in client.blocking.keys:
                     if other_key != key:
                         other_queue = self.blocked_clients.get(other_key)
                         if other_queue and client in other_queue:
@@ -106,5 +95,5 @@ class BlockedClientsManager:
 
             heapq.heappop(self.timeout_heap)
 
-            if client.blocked and client.blocked_timeout == timeout:
+            if client.blocking.active and client.blocking.timeout == timeout:
                 self.unblock_client(client)
