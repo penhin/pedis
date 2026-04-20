@@ -94,3 +94,27 @@ class Storage(Protocol):
     def get_last_id(self, key: bytes) -> Optional[bytes]:
         """Return the last stream ID for a key, or None if the key does not exist."""
         ...
+
+    def zadd(self, key: bytes, pairs: list[tuple[float, bytes]]) -> int:
+        """Add or update scored members in the sorted set and return the count of new inserts."""
+        ...
+
+    def zrank(self, key: bytes, member: bytes) -> Optional[int]:
+        """Return the zero-based rank of a member in ascending score order."""
+        ...
+
+    def zrange(self, key: bytes, start: int, stop: int) -> list[bytes]:
+        """Return members whose ranks fall within the inclusive [start, stop] range."""
+        ...
+
+    def zcard(self, key: bytes) -> int:
+        """Return the number of members currently stored in the sorted set."""
+        ...
+
+    def zscore(self, key: bytes, member: bytes) -> Optional[bytes]:
+        """Return the score of a member as bytes, or None when the member does not exist."""
+        ...
+
+    def zrem(self, key: bytes, members: list[bytes]) -> int:
+        """Remove one or more members from the sorted set and return the number removed."""
+        ...
