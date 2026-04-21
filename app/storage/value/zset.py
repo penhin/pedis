@@ -110,7 +110,7 @@ class SortedSet():
         self.dict: dict[bytes, float] = {}
         self.skiplist = SkipList()
 
-    def Add(self, pairs: list[tuple[float, bytes]]) -> int:
+    def add(self, pairs: list[tuple[float, bytes]]) -> int:
         added = 0
 
         for score, member in pairs:

@@ -6,7 +6,7 @@ from typing import Optional, List, Iterable, Any
 
 from app.storage.errors import *
 from app.storage.storages import Storage
-from app.storage.value import RedisValue, Stream
+from app.storage.value import RedisValue, Stream, SortedSet
 
 class InMemoryStorage():
     """In-memory implementation of Storage interface.
@@ -257,7 +257,15 @@ class InMemoryStorage():
 
     def zadd(self, key: bytes, pairs: list[tuple[float, bytes]]) -> int:
         """Add or update scored members in the sorted set and return the count of new inserts."""
-        pass
+        entry = self.store.get(key)
+        if entry is None:
+            entry = RedisValue("zset", SortedSet())
+            self.store[key] = entry
+        elif not entry.is_zset():
+            raise WrongTypeError
+
+        zset: SortedSet = entry.value
+        return zset.add(pairs)
 
     def zrank(self, key: bytes, member: bytes) -> Optional[int]:
         """Return the zero-based rank of a member in ascending score order."""
