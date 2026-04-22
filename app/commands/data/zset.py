@@ -36,3 +36,47 @@ def zrank_command(args, context):
     if result is None:
         return CommandResult.resp(NullBulk(), propagate=False)
     return result
+
+@command("ZRANGE", 3, flags=[])
+def zrange_command(args, context):
+    key = args[0]
+    start = int(args[1])
+    stop = int(args[2])
+    
+    try:
+        result = context.storage.zrange(key, start, stop)
+    except WrongTypeError:
+        raise CommandError("WRONGTYPE Operation against a key holding the wrong kind of value")
+    return result
+
+@command("ZCARD", 1, flags=[])
+def zcard_command(args, context):
+    key = args[0]
+    
+    try:
+        result = context.storage.zcard(key)
+    except WrongTypeError:
+        raise CommandError("WRONGTYPE Operation against a key holding the wrong kind of value")
+    return result
+
+@command("ZSCORE", 1, flags=[])
+def zscore_command(args, context):
+    key = args[0]
+    member = args[1]
+    
+    try:
+        result = context.storage.zscore(key, member)
+    except WrongTypeError:
+        raise CommandError("WRONGTYPE Operation against a key holding the wrong kind of value")
+    return result
+
+@command("ZREM", 1, flags=[])
+def zrem_command(args, context):
+    key = args[0]
+    member = args[1]
+    
+    try:
+        result = context.storage.zrem(key, member)
+    except WrongTypeError:
+        raise CommandError("WRONGTYPE Operation against a key holding the wrong kind of value")
+    return result

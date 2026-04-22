@@ -1,5 +1,3 @@
-from typing import Any
-
 import random
 
 MAX_LEVEL = 16
@@ -7,7 +5,7 @@ P = 0.5
 
 class SkipListNode():
     """Represents a single node in a Redis skiplist."""
-    def __init__(self, score: float, member: Any, level: int):
+    def __init__(self, score: float, member: bytes, level: int):
         self.score = score
         self.member = member
         self.forward = [None] * level
@@ -25,7 +23,22 @@ class SkipList():
             level += 1
         return level
     
-    def insert(self, score: float, member: Any):
+    def first_in_rank(self, rank: int):
+        if rank < 0 or rank >= self.length:
+            return None
+        
+        target_rank = rank + 1
+        traversed = 0
+        current = self.head
+
+        for i in reversed(range(self.level)):
+            while current.forward[i] and (traversed + current.span[i]) <= target_rank:
+                traversed += current.span[i]
+                current = current.forward[i]
+
+        return current
+    
+    def insert(self, score: float, member: bytes):
         update = [None] * MAX_LEVEL
         rank = [0] * MAX_LEVEL
         current = self.head
@@ -81,7 +94,7 @@ class SkipList():
 
         return None
 
-    def rank(self, score: float, member: Any) -> int | None:
+    def rank(self, score: float, member: bytes) -> int | None:
         current = self.head
         rank = 0
 
@@ -98,7 +111,7 @@ class SkipList():
 
         return None
     
-    def delete(self, score: float, member: Any):
+    def delete(self, score: float, member: bytes):
         update = [None] * MAX_LEVEL
         current = self.head
         
@@ -129,7 +142,6 @@ class SkipList():
 
         return False
 
-
     def display(self):
         for i in reversed(range(self.level)):
             node = self.head.forward[i]
@@ -158,7 +170,7 @@ class SortedSet():
                 added += 1
             else:
                 self.skiplist.delete(previous, member)
-    
+
             self.dict[member] = score
             self.skiplist.insert(score, member)
 
@@ -170,4 +182,57 @@ class SortedSet():
             return None
 
         return self.skiplist.rank(score, member)
+
+    def card(self) -> int:
+        return len(self.dict)
+
+    def score(self, member: bytes) -> bytes | None:
+        score = self.dict.get(member)
+        if score is None:
+            return None
+
+        return str(score).encode()
+
+    def remove(self, members: list[bytes]) -> int:
+        removed = 0
+
+        for member in members:
+            score = self.dict.pop(member, None)
+            if score is None:
+                continue
+
+            self.skiplist.delete(score, member)
+            removed += 1
+
+        return removed
         
+    def range(self, start: int, stop: int) -> list[bytes]:
+        n = self.skiplist.length
+        if n == 0:
+            return []
+        
+        if start < 0:
+            start += n
+        if stop < 0:
+            stop += n
+
+        if start < 0:
+            start = 0
+        if stop >= n:
+            stop = n - 1
+            
+        if start >= n or start > stop:
+            return []
+        
+        node = self.skiplist.first_in_rank(start)
+        if node is None:
+            return []
+        
+        result = []
+        remaining = stop - start + 1
+        while node is not None and remaining > 0:
+            result.append(node.member)
+            node = node.forward[0]
+            remaining -= 1
+
+        return result

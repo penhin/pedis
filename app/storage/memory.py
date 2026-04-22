@@ -28,22 +28,26 @@ class InMemoryStorage():
             self.expire.pop(key, None)
             return True
         return False
+
+    def _get_entry(self, key: bytes) -> Optional[RedisValue]:
+        """Return the current entry for a key, treating expired keys as missing."""
+        if self._is_expired(key):
+            return None
+        return self.store.get(key)
     
     def keys(self, pattern: bytes) -> List[bytes]:
         """Returns all keys matching pattern."""
         result = []
 
-        for key in self.store.keys():
-            if fnmatch(key, pattern):
+        for key in list(self.store.keys()):
+            if self._get_entry(key) is not None and fnmatch(key, pattern):
                 result.append(key)
                 
         return result
 
     def get_type(self, key: bytes) -> Optional[str]:
         """Get the type of value stored at key."""
-        if self._is_expired(key):
-            return None
-        entry = self.store.get(key)
+        entry = self._get_entry(key)
         return entry.type if entry else None
 
     def set(self, key: bytes, value: bytes, ttl_seconds: Optional[float] = None) -> None:
@@ -59,10 +63,7 @@ class InMemoryStorage():
 
     def get(self, key: bytes) -> Optional[bytes]:
         """Get string value. Returns None if key doesn't exist or is expired."""
-        if self._is_expired(key):
-            return None
-
-        entry = self.store.get(key)
+        entry = self._get_entry(key)
         if entry is None:
             return None
         if not entry.is_string():
@@ -72,7 +73,7 @@ class InMemoryStorage():
     
     def incr(self, key: bytes) -> bytes:
         """"Increments the number stored at key by one."""
-        entry = self.store.get(key)
+        entry = self._get_entry(key)
         
         if entry is None:
             self.set(key, b"1")
@@ -89,18 +90,18 @@ class InMemoryStorage():
 
     def delete(self, key: bytes) -> bool:
         """Delete a key."""
-        had_key = key in self.store
+        had_key = self._get_entry(key) is not None
         self.store.pop(key, None)
         self.expire.pop(key, None)
         return had_key
 
     def has_key(self, key: bytes) -> bool:
         """Check if key exists and is not expired."""
-        return key in self.store and not self._is_expired(key)
+        return self._get_entry(key) is not None
 
     def ttl(self, key: bytes) -> Optional[float]:
         """Get remaining TTL in seconds. Returns None if no expiration."""
-        if key not in self.store or self._is_expired(key):
+        if self._get_entry(key) is None:
             return None
         exp = self.expire.get(key)
         if exp is None:
@@ -110,7 +111,7 @@ class InMemoryStorage():
 
     def push(self, rpush: bool, key: bytes, values: Iterable[bytes]) -> int:
         """Push items to list (rpush=True for right, False for left)."""
-        entry = self.store.get(key)
+        entry = self._get_entry(key)
 
         if entry is None:
             entry = RedisValue("list", deque())
@@ -130,10 +131,7 @@ class InMemoryStorage():
 
     def lrange(self, key: bytes, start: int, stop: int) -> List[bytes]:
         """Get list range [start, stop] (inclusive)."""
-        if self._is_expired(key):
-            return []
-
-        entry = self.store.get(key)
+        entry = self._get_entry(key)
         if entry is None:
             return []
         if not entry.is_list():
@@ -157,10 +155,7 @@ class InMemoryStorage():
 
     def llen(self, key: bytes) -> int:
         """Get list length."""
-        if self._is_expired(key):
-            return 0
-
-        entry = self.store.get(key)
+        entry = self._get_entry(key)
         if entry is None:
             return 0
         if not entry.is_list():
@@ -170,10 +165,7 @@ class InMemoryStorage():
 
     def lpop(self, key: bytes, count: int = 1) -> Optional[List[bytes]]:
         """Pop count items from left of list."""
-        if self._is_expired(key):
-            return None
-
-        entry = self.store.get(key)
+        entry = self._get_entry(key)
         if entry is None:
             return None
         if not entry.is_list():
@@ -193,10 +185,7 @@ class InMemoryStorage():
     
     def try_lpop(self, key: bytes) -> Optional[bytes]:
         """Pop one item from left of list without raising errors."""
-        if self._is_expired(key):
-            return None
-
-        entry = self.store.get(key)
+        entry = self._get_entry(key)
         if entry is None or not entry.is_list():
             return None
 
@@ -208,7 +197,7 @@ class InMemoryStorage():
     
     def xadd(self, key: bytes, fields: dict[bytes, bytes], id: bytes = b'*') -> bytes:
         """Appends the specified stream entry to the stream at the specified key"""
-        entry = self.store.get(key)
+        entry = self._get_entry(key)
         if entry is None:
             entry = RedisValue("stream", Stream())
             self.store[key] = entry
@@ -220,7 +209,7 @@ class InMemoryStorage():
 
     def xrange(self, key: bytes, start: bytes, end: bytes) -> list[list[bytes]]:
         """Returns the stream entries matching a given range of IDs."""
-        entry = self.store.get(key)
+        entry = self._get_entry(key)
         if entry is None:
             return []
         elif not entry.is_stream():
@@ -233,7 +222,7 @@ class InMemoryStorage():
         """Read data from one or multiple streams"""
         result = []
         for key, id in zip(keys, ids):
-            entry = self.store.get(key)
+            entry = self._get_entry(key)
             if entry is None:
                 result.append([key, []])
             elif not entry.is_stream():
@@ -245,7 +234,7 @@ class InMemoryStorage():
     
     def get_last_id(self, key: bytes) -> Optional[bytes]:
         """"Return the stream last ID"""
-        entry = self.store.get(key)
+        entry = self._get_entry(key)
         if entry is None:
             return None
 
@@ -257,7 +246,7 @@ class InMemoryStorage():
 
     def zadd(self, key: bytes, pairs: list[tuple[float, bytes]]) -> int:
         """Add or update scored members in the sorted set and return the count of new inserts."""
-        entry = self.store.get(key)
+        entry = self._get_entry(key)
         if entry is None:
             entry = RedisValue("zset", SortedSet())
             self.store[key] = entry
@@ -269,7 +258,7 @@ class InMemoryStorage():
 
     def zrank(self, key: bytes, member: bytes) -> Optional[int]:
         """Return the zero-based rank of a member in ascending score order."""
-        entry = self.store.get(key)
+        entry = self._get_entry(key)
         if entry is None:
             return None
 
@@ -281,16 +270,45 @@ class InMemoryStorage():
 
     def zrange(self, key: bytes, start: int, stop: int) -> list[bytes]:
         """Return members whose ranks fall within the inclusive [start, stop] range."""
-        pass
+        entry = self._get_entry(key)
+        if entry is None:
+            return []
+
+        elif not entry.is_zset():
+            raise WrongTypeError
+
+        zset: SortedSet = entry.value
+        return zset.range(start, stop)
 
     def zcard(self, key: bytes) -> int:
         """Return the number of members currently stored in the sorted set."""
-        pass
+        entry = self._get_entry(key)
+        if entry is None:
+            return 0
+        if not entry.is_zset():
+            raise WrongTypeError
+
+        zset: SortedSet = entry.value
+        return zset.card()
 
     def zscore(self, key: bytes, member: bytes) -> Optional[bytes]:
         """Return the score of a member as bytes, or None when the member does not exist."""
-        pass
+        entry = self._get_entry(key)
+        if entry is None:
+            return None
+        if not entry.is_zset():
+            raise WrongTypeError
+
+        zset: SortedSet = entry.value
+        return zset.score(member)
 
     def zrem(self, key: bytes, members: list[bytes]) -> int:
         """Remove one or more members from the sorted set and return the number removed."""
-        pass
+        entry = self._get_entry(key)
+        if entry is None:
+            return 0
+        if not entry.is_zset():
+            raise WrongTypeError
+
+        zset: SortedSet = entry.value
+        return zset.remove(members)
