@@ -11,10 +11,12 @@ class SkipListNode():
         self.score = score
         self.member = member
         self.forward = [None] * level
+        self.span = [0] * level
 
 class SkipList():
     def __init__(self):
         self.level = 1
+        self.length = 0
         self.head = SkipListNode(0, None, MAX_LEVEL)
     
     def random_level(self) -> int:
@@ -25,13 +27,16 @@ class SkipList():
     
     def insert(self, score: float, member: Any):
         update = [None] * MAX_LEVEL
+        rank = [0] * MAX_LEVEL
         current = self.head
         
         for i in reversed(range(self.level)):
+            rank[i] = 0 if i == self.level - 1 else rank[i + 1]
             while(
                 current.forward[i]
                 and (current.forward[i].score, current.forward[i].member) < (score, member)
             ):
+                rank[i] += current.span[i]
                 current = current.forward[i]
                 
             update[i] = current
@@ -40,14 +45,24 @@ class SkipList():
         
         if level > self.level:
             for i in range(self.level, level):
+                rank[i] = 0
                 update[i] = self.head
+                update[i].span[i] = self.length
             self.level = level
         
         node = SkipListNode(score, member, level)
         
         for i in range(level):
+            offset = rank[0] - rank[i]
             node.forward[i] = update[i].forward[i]
+            node.span[i] = update[i].span[i] - offset if update[i].span[i] else 0
             update[i].forward[i] = node
+            update[i].span[i] = offset + 1
+
+        for i in range(level, self.level):
+            update[i].span[i] += 1
+
+        self.length += 1
             
     def search(self, score: float) -> SkipListNode:
         current = self.head
@@ -59,10 +74,27 @@ class SkipList():
             ):
                 current = current.forward[i]
         
-        current = current[0]
+        current = current.forward[0]
         
         if current and current.score == score:
             return current
+
+        return None
+
+    def rank(self, score: float, member: Any) -> int | None:
+        current = self.head
+        rank = 0
+
+        for i in reversed(range(self.level)):
+            while (
+                current.forward[i]
+                and (current.forward[i].score, current.forward[i].member) <= (score, member)
+            ):
+                rank += current.span[i]
+                current = current.forward[i]
+
+                if (current.score, current.member) == (score, member):
+                    return rank - 1
 
         return None
     
@@ -83,12 +115,19 @@ class SkipList():
 
         if current and (current.score, current.member) == (score, member):
             for i in range(self.level):
-                if update[i].forward[i] != current:
-                    break
-                update[i].forward[i] = current.forward[i]
+                if update[i].forward[i] == current:
+                    update[i].span[i] += current.span[i] - 1
+                    update[i].forward[i] = current.forward[i]
+                else:
+                    update[i].span[i] -= 1
             
             while self.level > 1 and self.head.forward[self.level-1] is None:
                 self.level -= 1
+
+            self.length -= 1
+            return True
+
+        return False
 
 
     def display(self):
@@ -119,9 +158,16 @@ class SortedSet():
                 added += 1
             else:
                 self.skiplist.delete(previous, member)
-
+    
             self.dict[member] = score
             self.skiplist.insert(score, member)
 
         return added
 
+    def rank(self, member: bytes) -> int | None:
+        score = self.dict.get(member)
+        if score is None:
+            return None
+
+        return self.skiplist.rank(score, member)
+        

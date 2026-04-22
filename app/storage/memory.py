@@ -269,7 +269,15 @@ class InMemoryStorage():
 
     def zrank(self, key: bytes, member: bytes) -> Optional[int]:
         """Return the zero-based rank of a member in ascending score order."""
-        pass
+        entry = self.store.get(key)
+        if entry is None:
+            return None
+
+        elif not entry.is_zset():
+            raise WrongTypeError
+
+        zset: SortedSet = entry.value
+        return zset.rank(member)
 
     def zrange(self, key: bytes, start: int, stop: int) -> list[bytes]:
         """Return members whose ranks fall within the inclusive [start, stop] range."""

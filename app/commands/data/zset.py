@@ -1,6 +1,7 @@
+from app.protocol import NullBulk
 from app.storage.errors import WrongTypeError
 
-from ..core.base import CommandError, command, CommandFlag
+from ..core.base import CommandError, command, CommandFlag, CommandResult
 
 @command("ZADD", -3, flags=[CommandFlag.WRITE])
 def zadd_command(args, context):
@@ -22,3 +23,16 @@ def zadd_command(args, context):
         return context.storage.zadd(key, pairs)
     except WrongTypeError:
         raise CommandError("WRONGTYPE Operation against a key holding the wrong kind of value")
+
+@command("ZRANK", 2, flags=[])
+def zrank_command(args, context):
+    key = args[0]
+    member = args[1]
+    
+    try:
+        result = context.storage.zrank(key, member)
+    except WrongTypeError:
+        raise CommandError("WRONGTYPE Operation against a key holding the wrong kind of value")
+    if result is None:
+        return CommandResult.resp(NullBulk(), propagate=False)
+    return result
