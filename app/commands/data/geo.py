@@ -1,4 +1,4 @@
-from app.protocol import NullBulk
+from app.protocol import NullBulk, NullArray
 from app.storage.errors import *
 from app.storage.value import distance_to_meters, meters_to_distance, validate_point
 
@@ -62,7 +62,7 @@ def geopos_command(args, context):
     result = []
     for position in positions:
         if position is None:
-            result.append(NullBulk())
+            result.append(NullArray())
         else:
             lon, lat = position
             result.append([_format_coord(lon), _format_coord(lat)])
