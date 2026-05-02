@@ -4,9 +4,8 @@ from fnmatch import fnmatch
 from collections import deque
 from typing import Optional, List, Iterable, Any
 
-from app.storage.errors import *
-from app.storage.storages import Storage
-from app.storage.value import RedisValue, Stream, SortedSet
+from .errors import *
+from .value import *
 
 class InMemoryStorage():
     """In-memory implementation of Storage interface.
@@ -34,7 +33,7 @@ class InMemoryStorage():
         if self._is_expired(key):
             return None
         return self.store.get(key)
-    
+          
     def keys(self, pattern: bytes) -> List[bytes]:
         """Returns all keys matching pattern."""
         result = []
@@ -312,3 +311,96 @@ class InMemoryStorage():
 
         zset: SortedSet = entry.value
         return zset.remove(members)
+    
+    def geoadd(self, key: bytes, points: list[tuple[float, float, bytes]]) -> int:
+        """Add or update geospatial members and return the count of new inserts."""
+        pairs = []
+
+        for lon, lat, member in points:
+            validate_point(lon, lat)
+            pairs.append((encode_geohash_score(lon, lat), member))
+            
+        added = self.zadd(key, pairs)
+            
+        return added
+
+    def geopos(self, key: bytes, members: list[bytes]) -> list:
+        """Return decoded positions for geospatial members."""
+        entry = self._get_entry(key)
+        if entry is None:
+            return [None] * len(members)
+        if not entry.is_zset():
+            raise WrongTypeError
+
+        zset: SortedSet = entry.value
+        result = []
+        for member in members:
+            score = zset.dict.get(member)
+            result.append(decode_geohash_score(score) if score is not None else None)
+        return result
+
+    def geodist(self, key: bytes, member1: bytes, member2: bytes) -> Optional[float]:
+        """Return the distance between two geospatial members in meters."""
+        positions = self.geopos(key, [member1, member2])
+        if positions[0] is None or positions[1] is None:
+            return None
+
+        lon1, lat1 = positions[0]
+        lon2, lat2 = positions[1]
+        return distance(lon1, lat1, lon2, lat2)
+
+    def geosearch(
+        self,
+        key: bytes,
+        center: tuple[float, float],
+        shape: tuple,
+        order: Optional[str] = None,
+        count: Optional[int] = None,
+    ) -> list[dict]:
+        """Return geospatial members inside a radius or box."""
+        entry = self._get_entry(key)
+        if entry is None:
+            return []
+        if not entry.is_zset():
+            raise WrongTypeError
+
+        center_lon, center_lat = center
+        zset: SortedSet = entry.value
+        result = []
+
+        for member, score in zset.dict.items():
+            lon, lat = decode_geohash_score(score)
+            dist = distance(center_lon, center_lat, lon, lat)
+
+            if shape[0] == "radius":
+                if dist > shape[1]:
+                    continue
+            else:
+                width, height = shape[1], shape[2]
+                x = distance(center_lon, center_lat, lon, center_lat)
+                y = distance(center_lon, center_lat, center_lon, lat)
+                if x > width / 2 or y > height / 2:
+                    continue
+
+            result.append(
+                {
+                    "member": member,
+                    "score": score,
+                    "lon": lon,
+                    "lat": lat,
+                    "dist": dist,
+                }
+            )
+
+        if order == "ASC":
+            result.sort(key=lambda item: item["dist"])
+        elif order == "DESC":
+            result.sort(key=lambda item: item["dist"], reverse=True)
+        else:
+            result.sort(key=lambda item: (item["score"], item["member"]))
+
+        if count is not None:
+            result = result[:count]
+
+        return result
+    

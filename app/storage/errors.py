@@ -13,6 +13,9 @@ class InvalidValueError(StorageError):
 class InvalidStreamIdError(StorageError):
     pass
 
+class InvalidGeoCoordinateError(StorageError):
+    pass
+
 
 class StreamIdOrderError(StorageError):
     pass

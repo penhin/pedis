@@ -2,6 +2,7 @@ from .server import server
 
 from .data import list
 from .data import zset
+from .data import geo
 from .data import string
 from .data import stream
 from .data import generic
