@@ -113,7 +113,7 @@ class ServerConfig:
         return config
 
     def aof_path(self):
-        return os.path.join(self.dir, self.appenddirname, self.appendfilename)
+        return os.path.join(self.dir, self.appenddirname, f"{self.appendfilename}.1.incr.aof")
 
     def parse_yes_no(value: str, option: str) -> bool:
         normalized = value.lower()
