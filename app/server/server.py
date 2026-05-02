@@ -5,9 +5,11 @@ import socket
 import secrets
 import selectors
 import traceback
+from fnmatch import fnmatch
 
 from app.storage.memory import InMemoryStorage
 from app.commands.core.dispatcher import CommandDispatcher
+from app.persistence.aof import AOFManager
 from app.server.acl import ACLManager
 from app.server.block_manager import BlockedClientsManager
 from app.server.pubsub_manager import PubSubManager
@@ -34,6 +36,10 @@ class ServerConfig:
         self.dir = os.getcwd()
         self.dbfilename = "dump.rdb"
         self.requirepass = None
+        self.appendonly = False
+        self.appenddirname = "appendonlydir"
+        self.appendfilename = "appendonly.aof"
+        self.appendfsync = "everysec"
     
     def info(self):
         info = (
@@ -46,11 +52,15 @@ class ServerConfig:
     
     def get(self, pattern):
         result = []
+        pattern_text = pattern.decode()
         
-        for key in ("dir", "dbfilename"):
-            if key == pattern.decode():
-                result.append(pattern)
-                result.append(getattr(self, key).encode())
+        for key in ("dir", "dbfilename", "appendonly", "appenddirname", "appendfilename", "appendfsync"):
+            if fnmatch(key, pattern_text):
+                result.append(key.encode())
+                value = getattr(self, key)
+                if isinstance(value, bool):
+                    value = "yes" if value else "no"
+                result.append(str(value).encode())
         
         return result
     
@@ -82,11 +92,36 @@ class ServerConfig:
             elif args[i] == "--requirepass":
                 config.requirepass = args[i + 1].encode()
                 i += 2
+            elif args[i] == "--appendonly":
+                config.appendonly = ServerConfig.parse_yes_no(args[i + 1], "--appendonly")
+                i += 2
+            elif args[i] == "--appenddirname":
+                config.appenddirname = args[i + 1]
+                i += 2
+            elif args[i] == "--appendfilename":
+                config.appendfilename = args[i + 1]
+                i += 2
+            elif args[i] == "--appendfsync":
+                config.appendfsync = args[i + 1].lower()
+                if config.appendfsync not in ("always", "everysec", "no"):
+                    raise ValueError("--appendfsync must be always, everysec, or no")
+                i += 2
 
             else:
                 raise ValueError(f"Unknown option {args[i]}")
 
         return config
+
+    def aof_path(self):
+        return os.path.join(self.dir, self.appenddirname, self.appendfilename)
+
+    def parse_yes_no(value: str, option: str) -> bool:
+        normalized = value.lower()
+        if normalized == "yes":
+            return True
+        if normalized == "no":
+            return False
+        raise ValueError(f"{option} must be yes or no")
 
 class RedisServer:
 
@@ -107,6 +142,7 @@ class RedisServer:
         
         self.clients = set()
         self.replication = ReplicationManager(self)
+        self.aof = AOFManager(self)
 
     def info(self) -> bytes:
         """Return server information as RESP-safe bytes."""

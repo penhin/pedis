@@ -46,8 +46,12 @@ class CommandDispatcher:
         command = COMMANDS[name]
         response = command.execute(args, context)
         
-        if CommandFlag.WRITE in command.flags and response.propagate:
+        aof = getattr(context.server, "aof", None)
+        loading_aof = aof is not None and aof.loading
+        if CommandFlag.WRITE in command.flags and response.propagate and not loading_aof:
             print(f"{raw_command} command should be propagated")
+            if aof is not None:
+                aof.append(raw_command)
             context.server.replication.propagate(raw_command)
         
         return response
