@@ -115,6 +115,12 @@ class ServerConfig:
     def aof_path(self):
         return os.path.join(self.dir, self.appenddirname, f"{self.appendfilename}.1.incr.aof")
 
+    def aof_manifest_path(self):
+        return os.path.join(self.dir, self.appenddirname, f"{self.appendfilename}.manifest")
+
+    def aof_manifest_content(self):
+        return f"file {self.appendfilename}.1.incr.aof seq 1 type i\n"
+
     def parse_yes_no(value: str, option: str) -> bool:
         normalized = value.lower()
         if normalized == "yes":
