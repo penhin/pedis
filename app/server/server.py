@@ -8,6 +8,7 @@ import traceback
 
 from app.storage.memory import InMemoryStorage
 from app.commands.core.dispatcher import CommandDispatcher
+from app.server.acl import ACLManager
 from app.server.block_manager import BlockedClientsManager
 from app.server.pubsub_manager import PubSubManager
 from app.server.replication_manager import ReplicationManager
@@ -32,6 +33,7 @@ class ServerConfig:
 
         self.dir = os.getcwd()
         self.dbfilename = "dump.rdb"
+        self.requirepass = None
     
     def info(self):
         info = (
@@ -77,6 +79,9 @@ class ServerConfig:
             elif args[i] == "--dbfilename":
                 config.dbfilename = args[i + 1]
                 i += 2
+            elif args[i] == "--requirepass":
+                config.requirepass = args[i + 1].encode()
+                i += 2
 
             else:
                 raise ValueError(f"Unknown option {args[i]}")
@@ -93,6 +98,9 @@ class RedisServer:
         self.sel = selectors.DefaultSelector()
 
         self.storage = InMemoryStorage()
+        self.acl = ACLManager()
+        if self.config.requirepass is not None:
+            self.acl.set_user(b"default", [b"on", b"resetpass", b">" + self.config.requirepass, b"~*", b"+@all"])
         self.dispatcher = CommandDispatcher()
         self.blocked_manager = BlockedClientsManager(self)
         self.pubsub = PubSubManager(self)

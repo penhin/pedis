@@ -5,6 +5,21 @@ class CommandDispatcher:
         client = context.client
         name = cmd_list[0].decode().upper()
         args = cmd_list[1:]
+
+        if name in COMMANDS:
+            command = COMMANDS[name]
+            if (
+                context.server.acl.requires_authentication()
+                and not client.auth.authenticated
+                and CommandFlag.NO_AUTH not in command.flags
+            ):
+                raise CommandError("NOAUTH Authentication required.")
+            if (
+                client.auth.authenticated
+                and CommandFlag.NO_AUTH not in command.flags
+                and not context.server.acl.can_execute(client.auth.user, name.encode())
+            ):
+                raise CommandError("NOPERM this user has no permissions to run the command")
         
         result = self.handle_transaction_command(name, args, context)
         if result is not None:

@@ -11,6 +11,7 @@ class CommandFlag(str, Enum):
     WRITE = "write"
     REPL = "replication"
     ALLOWED_IN_PUBSUB = "allowed_in_pubsub"
+    NO_AUTH = "no_auth"
 
 
 @dataclass(frozen=True)

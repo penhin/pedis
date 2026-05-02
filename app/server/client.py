@@ -77,6 +77,20 @@ class RoleState:
     def add(self, flag: str):
         self.flags.add(flag)
 
+
+@dataclass
+class AuthState:
+    user: bytes = b"default"
+    authenticated: bool = True
+
+    def set_user(self, user: bytes):
+        self.user = user
+        self.authenticated = True
+
+    def require_auth(self):
+        self.user = b"default"
+        self.authenticated = False
+
 class Client:
 
     def __init__(self, connection, address, server, flags=None):
@@ -90,6 +104,9 @@ class Client:
         self.blocking = BlockingState()
         self.transaction = TransactionState()
         self.role = RoleState(set(flags or []))
+        self.auth = AuthState()
+        if self.role.has(CLIENT_NORMAL) and self.server.acl.requires_authentication():
+            self.auth.require_auth()
 
         if self.role.has(CLIENT_MASTER):
             self.handler = _MasterHandler(self)
