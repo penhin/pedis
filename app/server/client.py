@@ -61,10 +61,19 @@ class PubSubState:
 class TransactionState:
     active: bool = False
     queue: list[tuple[list[bytes], bytes]] = field(default_factory=list)
+    watched_keys: dict[bytes, int] = field(default_factory=dict)
 
-    def reset(self):
+    def reset(self, clear_watches: bool = True):
         self.active = False
         self.queue.clear()
+        if clear_watches:
+            self.watched_keys.clear()
+
+    def watch(self, key: bytes, version: int):
+        self.watched_keys[key] = version
+
+    def unwatch(self):
+        self.watched_keys.clear()
 
 
 @dataclass

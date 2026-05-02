@@ -1,3 +1,5 @@
+from app.protocol import NullArray
+
 from .base import COMMANDS, CommandError, CommandFlag, CommandResult
 
 class CommandDispatcher:
@@ -54,25 +56,49 @@ class CommandDispatcher:
         client = context.client
 
         if name == "MULTI":
+            if args:
+                raise CommandError("ERR wrong number of arguments for 'multi' command")
             if client.transaction.active:
                 raise CommandError("ERR MUITL calls can not be nested")
             client.transaction.active = True
             client.transaction.queue = []
             return CommandResult.resp("OK")
         elif name == "EXEC":
+            if args:
+                raise CommandError("ERR wrong number of arguments for 'exec' command")
             if not client.transaction.active:
                 raise CommandError("ERR EXEC without MULTI")
             return self.exec_transaction(context)
         elif name == "DISCARD":
+            if args:
+                raise CommandError("ERR wrong number of arguments for 'discard' command")
             if not client.transaction.active:
                 raise CommandError("ERR DISCARD without MULTI")
             client.transaction.reset()
+            return CommandResult.resp("OK")
+        elif name == "WATCH":
+            if client.transaction.active:
+                raise CommandError("ERR WATCH inside MULTI is not allowed")
+            if not args:
+                raise CommandError("ERR wrong number of arguments for 'watch' command")
+            for key in args:
+                client.transaction.watch(key, context.storage.get_version(key))
+            return CommandResult.resp("OK")
+        elif name == "UNWATCH" and not client.transaction.active:
+            if args:
+                raise CommandError("ERR wrong number of arguments for 'unwatch' command")
+            client.transaction.unwatch()
             return CommandResult.resp("OK")
         
     def exec_transaction(self, context):
         client = context.client
         queue = list(client.transaction.queue)
-        
+
+        for key, version in client.transaction.watched_keys.items():
+            if context.storage.get_version(key) != version:
+                client.transaction.reset()
+                return CommandResult.resp(NullArray(), propagate=False)
+
         client.transaction.reset()
         
         results = []

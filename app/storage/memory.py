@@ -16,6 +16,14 @@ class InMemoryStorage():
     def __init__(self):
         self.store: dict[bytes, RedisValue] = {}
         self.expire: dict[bytes, float] = {} 
+        self.versions: dict[bytes, int] = {}
+
+    def _touch_key(self, key: bytes):
+        self.versions[key] = self.versions.get(key, 0) + 1
+
+    def get_version(self, key: bytes) -> int:
+        self._get_entry(key)
+        return self.versions.get(key, 0)
 
     def _is_expired(self, key: bytes) -> bool:
         """Check if key has expired."""
@@ -25,6 +33,7 @@ class InMemoryStorage():
         if exp <= time.time():
             self.store.pop(key, None)
             self.expire.pop(key, None)
+            self._touch_key(key)
             return True
         return False
 
@@ -59,6 +68,7 @@ class InMemoryStorage():
         else:
             self.store.pop(key, None)
             self.expire.pop(key, None)
+        self._touch_key(key)
 
     def get(self, key: bytes) -> Optional[bytes]:
         """Get string value. Returns None if key doesn't exist or is expired."""
@@ -85,6 +95,7 @@ class InMemoryStorage():
         except ValueError:
             raise InvalidValueError        
 
+        self._touch_key(key)
         return entry.value
 
     def delete(self, key: bytes) -> bool:
@@ -92,6 +103,8 @@ class InMemoryStorage():
         had_key = self._get_entry(key) is not None
         self.store.pop(key, None)
         self.expire.pop(key, None)
+        if had_key:
+            self._touch_key(key)
         return had_key
 
     def has_key(self, key: bytes) -> bool:
@@ -126,6 +139,7 @@ class InMemoryStorage():
             for v in values:
                 lst.appendleft(v)
 
+        self._touch_key(key)
         return len(lst)
 
     def lrange(self, key: bytes, start: int, stop: int) -> List[bytes]:
@@ -180,6 +194,7 @@ class InMemoryStorage():
         for _ in range(count):
             result.append(lst.popleft())
 
+        self._touch_key(key)
         return result[0] if count == 1 else result
     
     def try_lpop(self, key: bytes) -> Optional[bytes]:
@@ -192,7 +207,9 @@ class InMemoryStorage():
         if len(lst) == 0:
             return None
 
-        return lst.popleft()
+        value = lst.popleft()
+        self._touch_key(key)
+        return value
     
     def xadd(self, key: bytes, fields: dict[bytes, bytes], id: bytes = b'*') -> bytes:
         """Appends the specified stream entry to the stream at the specified key"""
@@ -204,7 +221,9 @@ class InMemoryStorage():
             raise WrongTypeError
 
         stream: Stream = entry.value
-        return stream.add(fields, id)
+        added_id = stream.add(fields, id)
+        self._touch_key(key)
+        return added_id
 
     def xrange(self, key: bytes, start: bytes, end: bytes) -> list[list[bytes]]:
         """Returns the stream entries matching a given range of IDs."""
@@ -253,7 +272,9 @@ class InMemoryStorage():
             raise WrongTypeError
 
         zset: SortedSet = entry.value
-        return zset.add(pairs)
+        added = zset.add(pairs)
+        self._touch_key(key)
+        return added
 
     def zrank(self, key: bytes, member: bytes) -> Optional[int]:
         """Return the zero-based rank of a member in ascending score order."""
@@ -310,7 +331,10 @@ class InMemoryStorage():
             raise WrongTypeError
 
         zset: SortedSet = entry.value
-        return zset.remove(members)
+        removed = zset.remove(members)
+        if removed:
+            self._touch_key(key)
+        return removed
     
     def geoadd(self, key: bytes, points: list[tuple[float, float, bytes]]) -> int:
         """Add or update geospatial members and return the count of new inserts."""
