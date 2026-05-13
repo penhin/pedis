@@ -3,7 +3,7 @@ from app.storage.errors import InvalidValueError, WrongTypeError
 
 from ..core.base import CommandResult, command, CommandError, CommandFlag
 
-@command("SET", -2, flags=[CommandFlag.WRITE])
+@command("SET", -3, flags=[CommandFlag.WRITE])
 def set_command(args, context):
     key, value = args[0], args[1]
     

@@ -9,7 +9,7 @@ def replconf_command(args, context):
     except ValueError as e:
         raise CommandError(f"ERR {e}")
 
-@command("PSYNC", -3, flags=[CommandFlag.REPL])
+@command("PSYNC", 2, flags=[CommandFlag.REPL])
 def psync_command(args, context):
     try:
         header, payload = context.server.replication.psync(context.client)
@@ -17,7 +17,7 @@ def psync_command(args, context):
     except Exception as e:
         raise CommandError(f"ERR {e}")
     
-@command("WAIT", -3, flags=[CommandFlag.REPL])
+@command("WAIT", 2, flags=[CommandFlag.REPL])
 def wait_command(args, context):
     try:
         numreplicas = int(args[0])

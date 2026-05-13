@@ -28,6 +28,16 @@ class CommandDispatcher:
             return result
 
         if client.transaction.active:
+            if name not in COMMANDS:
+                client.transaction.dirty = True
+                raise CommandError("ERR unknown command")
+
+            try:
+                COMMANDS[name].check_arity(len(args))
+            except CommandError:
+                client.transaction.dirty = True
+                raise
+
             client.transaction.queue.append((cmd_list, raw_command))
             return CommandResult.resp("QUEUED")
         
@@ -72,6 +82,9 @@ class CommandDispatcher:
                 raise CommandError("ERR wrong number of arguments for 'exec' command")
             if not client.transaction.active:
                 raise CommandError("ERR EXEC without MULTI")
+            if client.transaction.dirty:
+                client.transaction.reset()
+                raise CommandError("EXECABORT Transaction discarded because of previous errors.")
             return self.exec_transaction(context)
         elif name == "DISCARD":
             if args:

@@ -62,10 +62,12 @@ class TransactionState:
     active: bool = False
     queue: list[tuple[list[bytes], bytes]] = field(default_factory=list)
     watched_keys: dict[bytes, int] = field(default_factory=dict)
+    dirty: bool = False
 
     def reset(self, clear_watches: bool = True):
         self.active = False
         self.queue.clear()
+        self.dirty = False
         if clear_watches:
             self.watched_keys.clear()
 

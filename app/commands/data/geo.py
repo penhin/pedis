@@ -24,7 +24,7 @@ def _format_coord(value: float) -> bytes:
 def _format_distance(value: float) -> bytes:
     return f"{value:.4f}".encode()
 
-@command("GEOADD", -4, flags=[CommandFlag.WRITE])
+@command("GEOADD", -5, flags=[CommandFlag.WRITE])
 def geoadd_command(args, context):
     if len(args[1:]) % 3 != 0:
         raise CommandError("ERR syntax error")
@@ -49,7 +49,7 @@ def geoadd_command(args, context):
     except InvalidGeoCoordinateError:
         raise CommandError("ERR invalid longitude,latitude pair")
 
-@command("GEOPOS", -2, flags=[])
+@command("GEOPOS", -3, flags=[])
 def geopos_command(args, context):
     key = args[0]
     members = args[1:]

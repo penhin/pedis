@@ -5,7 +5,7 @@ from app.storage.errors import InvalidStreamIdError, StreamIdOrderError, WrongTy
 
 from ..core.base import CommandResult, command, CommandError, CommandFlag
 
-@command("XADD", -4, flags=[CommandFlag.WRITE])
+@command("XADD", -5, flags=[CommandFlag.WRITE])
 def xadd_command(args, context):
     if len(args) % 2 != 0:
         raise CommandError("ERR wrong number of arguments for 'xadd' command")
@@ -30,7 +30,7 @@ def xadd_command(args, context):
 
     return ret_id
 
-@command("XRANGE", -3)
+@command("XRANGE", 3)
 def xrange_command(args, context):
     key = args[0]
     start_id = args[1]
@@ -40,7 +40,7 @@ def xrange_command(args, context):
     except WrongTypeError:
         raise CommandError("WRONGTYPE Operation against a key holding the wrong kind of value")
 
-@command("XREAD", -3)
+@command("XREAD", -4)
 def xread_command(args, context):
     if not args:
         raise CommandError("ERR wrong number of arguments for 'xread' command")

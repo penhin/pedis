@@ -3,7 +3,7 @@ from app.storage.errors import WrongTypeError
 
 from ..core.base import CommandError, command, CommandFlag, CommandResult
 
-@command("ZADD", -3, flags=[CommandFlag.WRITE])
+@command("ZADD", -4, flags=[CommandFlag.WRITE])
 def zadd_command(args, context):
     if len(args[1:]) % 2 != 0:
         raise CommandError("ERR syntax error")
@@ -72,7 +72,7 @@ def zscore_command(args, context):
         return CommandResult.resp(NullBulk(), propagate=False)    
     return result
 
-@command("ZREM", 2, flags=[CommandFlag.WRITE])
+@command("ZREM", -3, flags=[CommandFlag.WRITE])
 def zrem_command(args, context):
     key = args[0]
     members = args[1:]

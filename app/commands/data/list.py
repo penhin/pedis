@@ -5,11 +5,11 @@ from app.storage.errors import WrongTypeError
 
 from ..core.base import CommandError, CommandResult, command, CommandFlag
 
-@command("RPUSH", -2, flags=[CommandFlag.WRITE])
+@command("RPUSH", -3, flags=[CommandFlag.WRITE])
 def rpush_command(args, context):
     return push_command(args, context, True)
 
-@command("LPUSH", -2, flags=[CommandFlag.WRITE])
+@command("LPUSH", -3, flags=[CommandFlag.WRITE])
 def lpush_command(args, context):
     return push_command(args, context, False)
 
@@ -41,8 +41,11 @@ def llen_command(args, context):
     except WrongTypeError:
         raise CommandError("WRONGTYPE Operation against a key holding the wrong kind of value")
 
-@command("LPOP", -1, flags=[CommandFlag.WRITE])
+@command("LPOP", -2, flags=[CommandFlag.WRITE])
 def lpop_command(args, context):
+    if len(args) > 2:
+        raise CommandError("ERR wrong number of arguments for 'lpop' command")
+
     count = int(args[1]) if len(args) > 1 else 1
     try:
         result = context.storage.lpop(args[0], count)
@@ -52,7 +55,7 @@ def lpop_command(args, context):
         return CommandResult.resp(NullBulk(), propagate=False)
     return result
 
-@command("BLPOP", -2, flags=[CommandFlag.WRITE])
+@command("BLPOP", -3, flags=[CommandFlag.WRITE])
 def blpop_command(args, context):
     keys = args[0:-1]
     timeout = float(args[-1])
