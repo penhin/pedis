@@ -1,8 +1,14 @@
+import logging
 import os
 import sys
 
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
+
+
 def run(cmd):
-    print(f"\n> {cmd}")
+    logger.info("\n> %s", cmd)
     os.system(cmd)
 
 def commit(msg):
@@ -37,7 +43,7 @@ def reset_one_commit(msg):
 
 def main():
     if len(sys.argv) < 2:
-        print("""
+        logger.info("""
 Usage:
   python g.py commit "msg"
   python g.py amend ["msg"]
@@ -65,7 +71,7 @@ Usage:
         reset_one_commit(sys.argv[2] if len(sys.argv) > 2 else "final commit")
 
     else:
-        print("Unknown command")
+        logger.info("Unknown command")
 
 if __name__ == "__main__":
     main()

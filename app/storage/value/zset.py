@@ -1,4 +1,8 @@
+import logging
 import random
+
+
+logger = logging.getLogger(__name__)
 
 MAX_LEVEL = 16
 P = 0.5
@@ -145,13 +149,13 @@ class SkipList():
     def display(self):
         for i in reversed(range(self.level)):
             node = self.head.forward[i]
-            print("Level", i, end=": ")
+            scores = []
 
             while node:
-                print(node.score, end=" ")
+                scores.append(str(node.score))
                 node = node.forward[i]
 
-            print()
+            logger.debug("Level %s: %s", i, " ".join(scores))
             
 
 class SortedSet():

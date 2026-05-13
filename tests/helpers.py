@@ -28,6 +28,12 @@ class RedisClient:
         self.sock.sendall(encode_command(parts))
         return self.read_response()
 
+    def write_command(self, *parts):
+        self.sock.sendall(encode_command(parts))
+
+    def write_commands(self, commands):
+        self.sock.sendall(encode_commands(commands))
+
     def read_response(self):
         prefix = self.file.read(1)
         if not prefix:
@@ -115,14 +121,18 @@ class PedisServer:
 
 
 def encode_command(parts):
-    encoded = f"*{len(parts)}\r\n".encode()
+    encoded = [b"*", str(len(parts)).encode(), CRLF]
     for part in parts:
         if isinstance(part, str):
             part = part.encode()
         elif isinstance(part, int):
             part = str(part).encode()
-        encoded += b"$" + str(len(part)).encode() + CRLF + part + CRLF
-    return encoded
+        encoded.extend((b"$", str(len(part)).encode(), CRLF, part, CRLF))
+    return b"".join(encoded)
+
+
+def encode_commands(commands):
+    return b"".join(encode_command(command) for command in commands)
 
 
 def free_port():
@@ -133,4 +143,3 @@ def free_port():
 
 def repo_root():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-

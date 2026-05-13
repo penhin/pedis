@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 
 from typing import List
@@ -8,6 +9,9 @@ from app.commands.core.base import CommandResult
 
 from .types import Blocked
 from .client import CLIENT_REPLICA
+
+
+logger = logging.getLogger(__name__)
 
 class ReplicationManager:
     """Manage replication state and responses inside RedisServer.
@@ -57,9 +61,11 @@ class ReplicationManager:
 
             if acknowledged >= required_replicas:
                 self._send_wait_result(client, acknowledged)
-                print(
-                    f"WAIT unblocked: required_offset={required_offset}, "
-                    f"required_replicas={required_replicas}, acknowledged={acknowledged}"
+                logger.debug(
+                    "WAIT unblocked: required_offset=%s, required_replicas=%s, acknowledged=%s",
+                    required_offset,
+                    required_replicas,
+                    acknowledged,
                 )
                 to_unblock.append(entry)
 
@@ -81,9 +87,11 @@ class ReplicationManager:
                         acknowledged += 1
 
                 self._send_wait_result(client, acknowledged)
-                print(
-                    f"WAIT timeout: required_offset={required_offset}, "
-                    f"required_replicas={required_replicas}, acknowledged={acknowledged}"
+                logger.debug(
+                    "WAIT timeout: required_offset=%s, required_replicas=%s, acknowledged=%s",
+                    required_offset,
+                    required_replicas,
+                    acknowledged,
                 )
                 to_unblock.append(entry)
         
@@ -104,14 +112,14 @@ class ReplicationManager:
         """
         self.master_connection = client
         self.repl_state = "PING_SENT"
-        print("Starting replication handshake: sending PING")
+        logger.debug("Starting replication handshake: sending PING")
         return CommandResult.resp([b"PING"], propagate=False)
 
     def handle_master_response(self, client, reply) -> CommandResult | None:
         """Process a single master reply and optionally return the next
         command (as list of bytes) that should be sent.
         """
-        print(f"Master response: {reply}, state: {self.repl_state}")
+        logger.debug("Master response: %r, state: %s", reply, self.repl_state)
         if self.repl_state == "PING_SENT":
             if reply == b"PONG":
                 self.repl_state = "REPLCONF_PORT_SENT"
@@ -129,7 +137,7 @@ class ReplicationManager:
                 return CommandResult.resp([b"PSYNC", b"?", b"-1"], propagate=False)
         elif self.repl_state == "PSYNC_SENT":
             if isinstance(reply, bytes) and reply.startswith(b"FULLRESYNC"):
-                print("Replication handshake completed")
+                logger.debug("Replication handshake completed")
                 
                 parts = reply.split()
                 self.master_replid = parts[1].decode()
@@ -143,13 +151,13 @@ class ReplicationManager:
             return
 
         rdb = client.parser.parse_rdb_file()
-        print(f"rdb data: {rdb}")
+        logger.debug("RDB data: %r", rdb)
         self.repl_state = "HS_SUCCE"
 
     def replconf(self, client, args: List[bytes]) -> CommandResult | str | None:
         """Process a REPLCONF request from a replica/master connection.
         """
-        print(f"REPLCONF received: {args}")
+        logger.debug("REPLCONF received: %r", args)
         i = 0
         result = None
         while i < len(args):
@@ -181,7 +189,7 @@ class ReplicationManager:
                 
                 offset = int(args[i + 1])
                 self.replica_acks[client] = offset
-                print(f"REPLCONF ACK received from {client}: offset={offset}")
+                logger.debug("REPLCONF ACK received from %s: offset=%s", client, offset)
                 self._check_wait_clients()
                 i += 2
 
@@ -248,7 +256,7 @@ class ReplicationManager:
                 if replica and hasattr(replica, 'connection') and replica.connection:
                     replica.send_raw(raw_command)
             except Exception as e:
-                print(f"Error propagating to replica: {e}")
+                logger.exception("Error propagating to replica: %s", e)
                 replicas_to_remove.append(replica)
         
         for replica in replicas_to_remove:
@@ -261,7 +269,9 @@ class ReplicationManager:
         sent_bytes = len(raw_command)
         before = self.master_repl_offset
         self.master_repl_offset += sent_bytes
-        print(
-            f"propagate: bytes={sent_bytes}, "
-            f"master_repl_offset {before}->{self.master_repl_offset}"
+        logger.debug(
+            "propagate: bytes=%s, master_repl_offset %s->%s",
+            sent_bytes,
+            before,
+            self.master_repl_offset,
         )

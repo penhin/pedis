@@ -1,8 +1,15 @@
-from app.protocol import NullArray
+import logging
 
-from .base import COMMANDS, CommandError, CommandFlag, CommandResult
+from .base import COMMANDS, CommandError, CommandFlag
+from .transaction_manager import TransactionManager
+
+
+logger = logging.getLogger(__name__)
 
 class CommandDispatcher:
+    def __init__(self):
+        self.transactions = TransactionManager(self)
+
     def dispatch(self, cmd_list, raw_command, context):
         client = context.client
         name = cmd_list[0].decode().upper()
@@ -23,23 +30,13 @@ class CommandDispatcher:
             ):
                 raise CommandError("NOPERM this user has no permissions to run the command")
         
-        result = self.handle_transaction_command(name, args, context)
+        result = self.transactions.handle_command(name, args, context)
         if result is not None:
             return result
 
-        if client.transaction.active:
-            if name not in COMMANDS:
-                client.transaction.dirty = True
-                raise CommandError("ERR unknown command")
-
-            try:
-                COMMANDS[name].check_arity(len(args))
-            except CommandError:
-                client.transaction.dirty = True
-                raise
-
-            client.transaction.queue.append((cmd_list, raw_command))
-            return CommandResult.resp("QUEUED")
+        result = self.transactions.enqueue_if_active(name, args, cmd_list, raw_command, context)
+        if result is not None:
+            return result
         
         if client.pubsub.active:
             if name not in COMMANDS:
@@ -59,78 +56,10 @@ class CommandDispatcher:
         aof = getattr(context.server, "aof", None)
         loading_aof = aof is not None and aof.loading
         if CommandFlag.WRITE in command.flags and response.propagate and not loading_aof:
-            print(f"{raw_command} command should be propagated")
+            logger.debug("%r command should be propagated", raw_command)
             if aof is not None:
                 aof.append(raw_command)
             context.server.replication.propagate(raw_command)
         
         return response
-    
-    def handle_transaction_command(self, name, args, context):
-        client = context.client
-
-        if name == "MULTI":
-            if args:
-                raise CommandError("ERR wrong number of arguments for 'multi' command")
-            if client.transaction.active:
-                raise CommandError("ERR MUITL calls can not be nested")
-            client.transaction.active = True
-            client.transaction.queue = []
-            return CommandResult.resp("OK")
-        elif name == "EXEC":
-            if args:
-                raise CommandError("ERR wrong number of arguments for 'exec' command")
-            if not client.transaction.active:
-                raise CommandError("ERR EXEC without MULTI")
-            if client.transaction.dirty:
-                client.transaction.reset()
-                raise CommandError("EXECABORT Transaction discarded because of previous errors.")
-            return self.exec_transaction(context)
-        elif name == "DISCARD":
-            if args:
-                raise CommandError("ERR wrong number of arguments for 'discard' command")
-            if not client.transaction.active:
-                raise CommandError("ERR DISCARD without MULTI")
-            client.transaction.reset()
-            return CommandResult.resp("OK")
-        elif name == "WATCH":
-            if client.transaction.active:
-                raise CommandError("ERR WATCH inside MULTI is not allowed")
-            if not args:
-                raise CommandError("ERR wrong number of arguments for 'watch' command")
-            for key in args:
-                client.transaction.watch(key, context.storage.get_version(key))
-            return CommandResult.resp("OK")
-        elif name == "UNWATCH" and not client.transaction.active:
-            if args:
-                raise CommandError("ERR wrong number of arguments for 'unwatch' command")
-            client.transaction.unwatch()
-            return CommandResult.resp("OK")
-        
-    def exec_transaction(self, context):
-        client = context.client
-        queue = list(client.transaction.queue)
-
-        for key, version in client.transaction.watched_keys.items():
-            if context.storage.get_version(key) != version:
-                client.transaction.reset()
-                return CommandResult.resp(NullArray(), propagate=False)
-
-        client.transaction.reset()
-        
-        results = []
-        
-        for item in queue:
-            try:
-                cmd_list, raw_command = item if isinstance(item, tuple) else (item, b"")
-                result = self.dispatch(cmd_list, raw_command, context)
-                if result.blocked:
-                    raise CommandError("ERR blocking commands are not allowed inside MULTI")
-                if len(result.frames) != 1 or result.frames[0].kind != "resp":
-                    raise CommandError("ERR unsupported response inside EXEC")
-                results.append(result.frames[0].value)
-            except CommandError as e:
-                results.append(e)
-        
-        return CommandResult.resp(results)
         

@@ -4,7 +4,7 @@ import time
 import socket
 import secrets
 import selectors
-import traceback
+import logging
 from fnmatch import fnmatch
 
 from app.storage.memory import InMemoryStorage
@@ -16,6 +16,9 @@ from app.server.pubsub_manager import PubSubManager
 from app.server.replication_manager import ReplicationManager
 
 from .client import Client, CLIENT_MASTER, CLIENT_NORMAL
+
+
+logger = logging.getLogger(__name__)
 
 class ServerConfig:
 
@@ -194,7 +197,7 @@ class RedisServer:
             client.send_result(initial)
     
     def run_event_loop(self):
-        print("Server start running event loop...")
+        logger.info("Server start running event loop...")
         sel = self.sel
         server_socket = self.server_socket
 
@@ -207,7 +210,7 @@ class RedisServer:
                     conn.setblocking(False)
                     client = Client(conn, addr, self, flags=[CLIENT_NORMAL])
                     
-                    print("Detect a new client connection...")
+                    logger.debug("Detected a new client connection from %s", addr)
                     sel.register(conn, selectors.EVENT_READ, data=client)
                     self.clients.add(client)
                 else:
@@ -215,12 +218,9 @@ class RedisServer:
                     try:
                         client.handler.handle(sel)
                     except Exception as e:
-                        print(f"Err {e}")
+                        logger.exception("Client handler error: %s", e)
                         client.close()
-                        traceback.print_exc()
 
             self.blocked_manager.check_timeouts(time.time())
             self.replication.check_timeouts(time.time())
             
-
-

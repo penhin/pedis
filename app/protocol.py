@@ -1,6 +1,9 @@
+import logging
 import socket
 
 CRLF = b"\r\n"
+
+logger = logging.getLogger(__name__)
 
 class RESPError(Exception):
     pass
@@ -98,7 +101,7 @@ class RESPParser:
 
         length = int(self.reader.read_line())
 
-        print(f"Expected {length} bytes,")
+        logger.debug("Expected RDB bulk payload of %s bytes", length)
 
         if length == -1:
             return None
@@ -107,7 +110,7 @@ class RESPParser:
 
         if len(self.reader.buffer) >= 2 and self.reader.buffer[:2] == CRLF:
             self.reader.read_exact(2)
-        print(f"Received data: {data}.")
+        logger.debug("Received RDB data: %r", data)
 
         return data
     
@@ -123,7 +126,12 @@ class RESPParser:
         data = self.reader.read_exact(len)
         crlf = self.reader.read_exact(2)
         if crlf != CRLF:
-            print(f"Expected {len} bytes, received data: {data}. Terminator {crlf} is not CRLF.")
+            logger.debug(
+                "Expected %s bytes, received data %r. Terminator %r is not CRLF.",
+                len,
+                data,
+                crlf,
+            )
             raise RESPError("invalid bulk String termination")
         
         return data
@@ -144,37 +152,36 @@ class RESPEncoder:
         data = s.encode("utf-8")
         if b"\r" in data or b"\n" in data:
             raise ValueError("Simple String cannot contatin CR or LF")
-        return b"+" + data + CRLF 
-
+        return b"".join((b"+", data, CRLF))
+	
     def error(self, s: str) -> bytes:
         error = s.encode("utf-8")           
-        return b"-" + error + CRLF 
-
+        return b"".join((b"-", error, CRLF))
+	
     def integer(self, n: int) -> bytes:
-        return b":" + str(n).encode() + CRLF
-
+        return b"".join((b":", str(n).encode(), CRLF))
+	
     def bulk(self, v: bytes | NullBulk) -> bytes:
         if isinstance(v, NullBulk):
             return b"$-1" + CRLF
         
-        return b"$" + str(len(v)).encode() + CRLF + v + CRLF
+        return b"".join((b"$", str(len(v)).encode(), CRLF, v, CRLF))
     
     def bulk_raw(self, v: bytes | NullBulk) -> bytes:
         if isinstance(v, NullBulk):
             return b"$-1" + CRLF
         
-        return b"$" + str(len(v)).encode() + CRLF + v
+        return b"".join((b"$", str(len(v)).encode(), CRLF, v))
 
     def array(self, items: list | NullArray) -> bytes:
         if isinstance(items, NullArray):
             return b"*-1" + CRLF
 
-        result = b"*" + str(len(items)).encode() + CRLF
-
+        parts = [b"*", str(len(items)).encode(), CRLF]
         for item in items:
-            result += self.encode(item)
+            parts.append(self.encode(item))
 
-        return result
+        return b"".join(parts)
 
     def encode(self, value) -> bytes:
         if isinstance(value, Exception):
