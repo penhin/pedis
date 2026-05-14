@@ -4,7 +4,7 @@ import logging
 from enum import Enum
 
 from app.commands.core.base import CommandResult
-from app.protocol import RESPParser, RESPEncoder, RESPError
+from app.protocol import RESPParser, RESPEncoder, RESPError, ProtocolError
 
 from .context import Context
 from .block_handler import ListStrategy, StreamStrategy, WaitStrategy
@@ -173,21 +173,30 @@ class Client:
 
 
 class _NormalHandler:
+    MAX_COMMANDS_PER_TICK = 256
+
     def __init__(self, client: Client):
         self.client = client
 
     def handle(self, selector):
+        processed = 0
         try:
-            while True:
+            while processed < self.MAX_COMMANDS_PER_TICK:
                 cmd_list, _ = self.client.parser.parse()
                 raw_command = self.client.encoder.encode(cmd_list)
                 logger.debug("Master received command from %s: %r", self.client, cmd_list)
+                processed += 1
 
                 context = Context(self.client.server, self.client)
 
                 try:
                     result = self.client.server.dispatcher.dispatch(cmd_list, raw_command, context)
                     logger.debug("Master command result for %s: %r", self.client, result)
+                except ProtocolError as e:
+                    logger.debug("Protocol error: %s", e)
+                    self.client.send(e)
+                    self.client.close()
+                    return
                 except RESPError as e:
                     logger.debug("RESP error: %s", e)
                     self.client.send(e)
@@ -201,6 +210,14 @@ class _NormalHandler:
                     self.client.send_result(result)
                 else:
                     return
+
+            if self.client.parser.reader.buffer:
+                self.client.server.schedule_client(self.client)
+        except ProtocolError as e:
+            logger.debug("Protocol parse error: %s", e)
+            self.client.send(e)
+            self.client.close()
+            return
         except BlockingIOError:
             return
         except ConnectionError:

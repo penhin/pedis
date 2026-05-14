@@ -45,6 +45,7 @@ class BlockedClientsManager:
         result = CommandResult.null_array() if response is None else normalize_command_result(response)
         result.propagate = False
         client.send_result(result)
+        client.server.schedule_client(client)
 
     def remove_client(self, client):
         """Remove a client from all blocked queues and clear its state."""

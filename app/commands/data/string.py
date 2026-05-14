@@ -71,10 +71,25 @@ def parse_set(args):
             opts["keepttl"] = True
             i += 1
         elif token == b'EX':
-            opts["ttl_seconds"] = int(args[i+1])
+            if i + 1 >= len(args):
+                raise CommandError("ERR syntax error")
+            try:
+                opts["ttl_seconds"] = int(args[i+1])
+            except ValueError:
+                raise CommandError("ERR invalid expire time in 'set' command")
+            if opts["ttl_seconds"] <= 0:
+                raise CommandError("ERR invalid expire time in 'set' command")
             i += 2
         elif token == b'PX':
-            opts["ttl_seconds"] = int(args[i+1]) / 1000
+            if i + 1 >= len(args):
+                raise CommandError("ERR syntax error")
+            try:
+                ttl_milliseconds = int(args[i+1])
+            except ValueError:
+                raise CommandError("ERR invalid expire time in 'set' command")
+            if ttl_milliseconds <= 0:
+                raise CommandError("ERR invalid expire time in 'set' command")
+            opts["ttl_seconds"] = ttl_milliseconds / 1000
             i += 2
         else:
             raise CommandError("ERR unknown option")

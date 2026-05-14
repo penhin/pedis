@@ -150,6 +150,7 @@ class RedisServer:
         self.pubsub = PubSubManager(self)
         
         self.clients = set()
+        self.pending_clients = set()
         self.replication = ReplicationManager(self)
         self.aof = AOFManager(self)
 
@@ -195,6 +196,29 @@ class RedisServer:
         initial = self.replication.start_replication(client)
         if initial:
             client.send_result(initial)
+
+    def schedule_client(self, client):
+        if client.connection is not None and not client.blocking.active:
+            self.pending_clients.add(client)
+
+    def process_pending_clients(self, max_batches=16):
+        batches = 0
+        while self.pending_clients and batches < max_batches:
+            clients = list(self.pending_clients)
+            self.pending_clients.clear()
+            batches += 1
+
+            for client in clients:
+                if (
+                    client.connection is not None
+                    and not client.blocking.active
+                    and client.parser.reader.buffer
+                ):
+                    try:
+                        client.handler.handle(self.sel)
+                    except Exception as e:
+                        logger.exception("Pending client handler error: %s", e)
+                        client.close()
     
     def run_event_loop(self):
         logger.info("Server start running event loop...")
@@ -223,4 +247,5 @@ class RedisServer:
 
             self.blocked_manager.check_timeouts(time.time())
             self.replication.check_timeouts(time.time())
+            self.process_pending_clients()
             

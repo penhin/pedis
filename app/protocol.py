@@ -8,6 +8,9 @@ logger = logging.getLogger(__name__)
 class RESPError(Exception):
     pass
 
+class ProtocolError(RESPError):
+    pass
+
 class NullBulk():
     pass
 
@@ -80,10 +83,13 @@ class RESPParser:
                 result = self._parse_bulk_string()
             elif prefix == b'+':
                 result = self._parse_simple_string()
-            elif prefix == b':': 
-                result = int(self.reader.read_line())
+            elif prefix == b':':
+                try:
+                    result = int(self.reader.read_line())
+                except ValueError:
+                    raise ProtocolError("ERR Protocol error: invalid integer")
             else:
-                raise Exception(f"unknown RESP type: {prefix}")
+                raise ProtocolError(f"ERR Protocol error: unknown RESP type {prefix!r}")
         finally:
             self._depth -= 1
         
@@ -99,7 +105,10 @@ class RESPParser:
         if prefix != b'$':
             raise RESPError("expected bulk string for RDB")
 
-        length = int(self.reader.read_line())
+        try:
+            length = int(self.reader.read_line())
+        except ValueError:
+            raise ProtocolError("ERR Protocol error: invalid bulk length")
 
         logger.debug("Expected RDB bulk payload of %s bytes", length)
 
@@ -118,28 +127,38 @@ class RESPParser:
         return self.reader.read_line()
 
     def _parse_bulk_string(self):
-        len = int(self.reader.read_line())
+        try:
+            length = int(self.reader.read_line())
+        except ValueError:
+            raise ProtocolError("ERR Protocol error: invalid bulk length")
 
-        if len == -1:
+        if length == -1:
             return None
+        if length < -1:
+            raise ProtocolError("ERR Protocol error: invalid bulk length")
         
-        data = self.reader.read_exact(len)
+        data = self.reader.read_exact(length)
         crlf = self.reader.read_exact(2)
         if crlf != CRLF:
             logger.debug(
                 "Expected %s bytes, received data %r. Terminator %r is not CRLF.",
-                len,
+                length,
                 data,
                 crlf,
             )
-            raise RESPError("invalid bulk String termination")
+            raise ProtocolError("ERR Protocol error: invalid bulk string termination")
         
         return data
 
     def _parse_array(self):
         line = self.reader.read_line()
-        n = int(line)
+        try:
+            n = int(line)
+        except ValueError:
+            raise ProtocolError("ERR Protocol error: invalid array length")
         if n == -1: return None
+        if n < -1:
+            raise ProtocolError("ERR Protocol error: invalid array length")
         
         data = []
         for _ in range(n):

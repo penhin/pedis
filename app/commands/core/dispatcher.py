@@ -1,5 +1,7 @@
 import logging
 
+from app.protocol import ProtocolError
+
 from .base import COMMANDS, CommandError, CommandFlag
 from .transaction_manager import TransactionManager
 
@@ -11,6 +13,9 @@ class CommandDispatcher:
         self.transactions = TransactionManager(self)
 
     def dispatch(self, cmd_list, raw_command, context):
+        if not isinstance(cmd_list, list) or not cmd_list or not isinstance(cmd_list[0], bytes):
+            raise ProtocolError("ERR Protocol error: expected non-empty array of bulk strings")
+
         client = context.client
         name = cmd_list[0].decode().upper()
         args = cmd_list[1:]

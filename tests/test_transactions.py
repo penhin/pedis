@@ -1,3 +1,4 @@
+import time
 import unittest
 
 from tests.helpers import PedisServer, RedisError
@@ -42,7 +43,18 @@ class TransactionTests(unittest.TestCase):
             self.assertIsInstance(err, RedisError)
             self.assertIn("EXECABORT", str(err))
 
+    def test_watched_key_expiration_aborts_transaction(self):
+        with PedisServer() as server:
+            client = server.client()
+            self.addCleanup(client.close)
+
+            self.assertEqual(client.command("SET", "watched", "value", "PX", "50"), "OK")
+            self.assertEqual(client.command("WATCH", "watched"), "OK")
+            time.sleep(0.08)
+            self.assertEqual(client.command("MULTI"), "OK")
+            self.assertEqual(client.command("GET", "watched"), "QUEUED")
+            self.assertIsNone(client.command("EXEC"))
+
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -40,8 +40,11 @@ def zrank_command(args, context):
 @command("ZRANGE", 3, flags=[])
 def zrange_command(args, context):
     key = args[0]
-    start = int(args[1])
-    stop = int(args[2])
+    try:
+        start = int(args[1])
+        stop = int(args[2])
+    except ValueError:
+        raise CommandError("ERR value is not an integer or out of range")
     
     try:
         result = context.storage.zrange(key, start, stop)

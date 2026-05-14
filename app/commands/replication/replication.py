@@ -22,8 +22,12 @@ def wait_command(args, context):
     try:
         numreplicas = int(args[0])
         timeout_ms = int(args[1])
-        timeout = timeout_ms / 1000
+    except ValueError:
+        raise CommandError("ERR value is not an integer or out of range")
+
+    timeout = timeout_ms / 1000
+    try:
         result = context.server.replication.wait_for_replicas(context.client, numreplicas, timeout)
-        return CommandResult.blocked_result() if isinstance(result, Blocked) else result
     except Exception as e:
         raise CommandError(f"ERR {e}")
+    return CommandResult.blocked_result() if isinstance(result, Blocked) else result

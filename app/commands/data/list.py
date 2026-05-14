@@ -30,7 +30,13 @@ def push_command(args, context, rpush):
 @command("LRANGE", 3)
 def lrange_command(args, context):
     try:
-        return context.storage.lrange(args[0], int(args[1]), int(args[2]))
+        start = int(args[1])
+        stop = int(args[2])
+    except ValueError:
+        raise CommandError("ERR value is not an integer or out of range")
+
+    try:
+        return context.storage.lrange(args[0], start, stop)
     except WrongTypeError:
         raise CommandError("WRONGTYPE Operation against a key holding the wrong kind of value")
 
@@ -46,7 +52,13 @@ def lpop_command(args, context):
     if len(args) > 2:
         raise CommandError("ERR wrong number of arguments for 'lpop' command")
 
-    count = int(args[1]) if len(args) > 1 else 1
+    try:
+        count = int(args[1]) if len(args) > 1 else 1
+    except ValueError:
+        raise CommandError("ERR value is not an integer or out of range")
+    if count < 0:
+        raise CommandError("ERR value is out of range")
+
     try:
         result = context.storage.lpop(args[0], count)
     except WrongTypeError:
@@ -58,7 +70,12 @@ def lpop_command(args, context):
 @command("BLPOP", -3, flags=[CommandFlag.WRITE])
 def blpop_command(args, context):
     keys = args[0:-1]
-    timeout = float(args[-1])
+    try:
+        timeout = float(args[-1])
+    except ValueError:
+        raise CommandError("ERR timeout is not a float or out of range")
+    if timeout < 0:
+        raise CommandError("ERR timeout is negative")
     
     for key in keys:
         value = context.storage.try_lpop(key)
